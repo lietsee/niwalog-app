@@ -2,91 +2,760 @@
 
 造園・庭園管理業務における現場記録管理システム
 
-## 概要
+## 目次
 
-NiwaLogは、現場ごとの詳細情報を蓄積・管理し、収益性分析、従業員稼働管理、案件の時系列変化を可視化するWebアプリケーションです。
+1. [プロジェクト概要](#プロジェクト概要)
+2. [技術スタック](#技術スタック)
+3. [開発環境のセットアップ](#開発環境のセットアップ)
+4. [プロジェクト構造](#プロジェクト構造)
+5. [データベーススキーマ](#データベーススキーマ)
+6. [実装済み機能](#実装済み機能)
+7. [未実装機能](#未実装機能)
+8. [トラブルシューティング](#トラブルシューティング)
+9. [Git管理](#git管理)
+10. [ライセンス・作成者](#ライセンス作成者)
+
+---
+
+## プロジェクト概要
+
+NiwaLogは、造園・庭園管理業務における現場ごとの詳細情報を蓄積・管理するWebアプリケーションです。
+
+### 業務背景・目的
+
+- 現場ごとの基本情報（設備・移動費など）を一元管理
+- 案件（実施日ごとの作業）の記録と振り返り
+- 従業員の稼働時間管理と経費記録
+- 収益性分析と業務改善の可視化
+
+### 主要機能概要
+
+- **現場マスタ管理**: 現場情報のCRUD、検索機能
+- **案件管理**: 実施日ごとの作業記録（未実装）
+- **日別作業記録**: 複数日作業の管理と従事者稼働記録（未実装）
+- **ダッシュボード**: 収益性分析、稼働分析（未実装）
+
+---
 
 ## 技術スタック
 
-- **フロントエンド**: Vite + React 18 + TypeScript
-- **UI**: Radix UI + Tailwind CSS
-- **フォーム**: React Hook Form + Zod
-- **データベース**: Supabase (PostgreSQL)
-- **認証**: Supabase Auth
+| カテゴリ | 技術 | バージョン | 用途 |
+|---------|------|----------|------|
+| フロントエンド | React | 19.2.0 | UI構築 |
+| ビルドツール | Vite | 7.2.4 | 開発環境 |
+| 言語 | TypeScript | ~5.9.3 | 型安全性 |
+| UIコンポーネント | Radix UI | 各種 ^1.x-^2.x | アクセシビリティ |
+| スタイリング | Tailwind CSS | 3.4.17 | デザイン |
+| フォーム管理 | React Hook Form | 7.70.0 | フォーム制御 |
+| バリデーション | Zod | 4.3.5 | スキーマ検証 |
+| データベース | Supabase JS | 2.90.1 | PostgreSQL + Auth |
+| 通知 | Sonner | 2.0.7 | トースト通知 |
+| アイコン | Lucide React | 0.562.0 | UIアイコン |
+
+---
 
 ## 開発環境のセットアップ
 
-### 必要な環境
+### 前提条件
 
-- Node.js 18以上
-- Docker Desktop
+- **Node.js** 18以上
+- **Docker Desktop**（Supabaseローカル環境用）
+- **Git**
 
-### インストール手順
+### セットアップ手順
 
-1. リポジトリのクローン:
+#### 1. リポジトリクローン
+
 ```bash
-git clone https://github.com/yourusername/niwalog-app.git
+git clone https://github.com/lietsee/niwalog-app.git
 cd niwalog-app
 ```
 
-2. 依存関係のインストール:
+#### 2. 依存関係インストール
+
 ```bash
 npm install
 ```
 
-3. Supabaseローカル環境の起動:
+#### 3. Supabaseローカル起動
+
 ```bash
 npx supabase start
 ```
 
-4. 環境変数の設定:
-`.env.local.example`をコピーして`.env.local`を作成し、Supabaseの接続情報を設定してください。
+起動後、以下の情報が表示されます:
+- API URL (通常: `http://127.0.0.1:54621`)
+- anon key
+- service_role key
 
-5. 開発サーバーの起動:
+#### 4. 環境変数設定
+
+`.env.local.example`をコピーして`.env.local`を作成:
+
+```bash
+cp .env.local.example .env.local
+```
+
+`.env.local`の内容:
+
+```env
+VITE_SUPABASE_URL=http://127.0.0.1:54621
+VITE_SUPABASE_ANON_KEY=<Supabase起動時に表示されたanon key>
+```
+
+#### 5. テストユーザー作成
+
+```bash
+psql postgresql://postgres:postgres@127.0.0.1:54622/postgres
+```
+
+psql接続後、以下のSQLを実行:
+
+```sql
+INSERT INTO auth.users (
+  instance_id,
+  id,
+  aud,
+  role,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  created_at,
+  updated_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  is_super_admin,
+  confirmation_token,
+  email_change,
+  email_change_token_new,
+  recovery_token
+) VALUES (
+  '00000000-0000-0000-0000-000000000000',
+  gen_random_uuid(),
+  'authenticated',
+  'authenticated',
+  'test@example.com',
+  crypt('password123', gen_salt('bf')),
+  NOW(),
+  NOW(),
+  NOW(),
+  '{"provider":"email","providers":["email"]}',
+  '{}',
+  FALSE,
+  '',
+  '',
+  '',
+  ''
+);
+```
+
+#### 6. サンプルデータ投入（オプション）
+
+テストユーザーのIDを確認:
+
+```sql
+SELECT id FROM auth.users WHERE email = 'test@example.com';
+```
+
+サンプル現場データを投入:
+
+```sql
+INSERT INTO fields (field_code, field_name, customer_name, address, has_electricity, has_water, has_toilet, toilet_distance, travel_distance_km, travel_time_minutes, travel_cost, notes, warnings, created_by)
+VALUES
+  ('KT-0001', '金城公園', '名古屋市様', '愛知県名古屋市北区金城1-1-1', true, true, false, '徒歩3分', 5.2, 15, 500, '駐車スペース2台分あり', '交通量多いため注意', '<上記で取得したID>'),
+  ('SB-0002', '鈴木邸', '鈴木様', '愛知県名古屋市昭和区御器所3-10-5', false, false, false, '車で5分', 8.0, 20, 800, '道路が狭い', '電線注意', '<上記で取得したID>'),
+  ('NG-0003', '長久手緑地', '長久手市役所', '愛知県長久手市岩作三ヶ峯1-1', true, true, true, NULL, 12.5, 30, 1200, 'トイレ利用可能', '傾斜地多し', '<上記で取得したID>');
+```
+
+#### 7. 開発サーバー起動
+
 ```bash
 npm run dev
 ```
 
-## 利用可能なスクリプト
+ブラウザで `http://localhost:5173` にアクセス。
 
-- `npm run dev` - 開発サーバー起動
+#### 8. ログイン
+
+- **メールアドレス**: test@example.com
+- **パスワード**: password123
+
+### 利用可能なスクリプト
+
+- `npm run dev` - 開発サーバー起動（localhost:5173）
 - `npm run build` - 本番ビルド
-- `npm run preview` - ビルドしたアプリのプレビュー
+- `npm run preview` - ビルド後プレビュー
 - `npm run lint` - ESLint実行
 - `npx supabase start` - Supabaseローカル起動
 - `npx supabase stop` - Supabaseローカル停止
-- `npx supabase db reset` - データベースリセット
+- `npx supabase db reset` - データベースリセット（マイグレーション再実行）
+
+---
 
 ## プロジェクト構造
 
 ```
 niwalog-app/
 ├── src/
-│   ├── lib/          # API層とユーティリティ
-│   ├── pages/        # ページコンポーネント
-│   ├── components/   # 再利用可能なコンポーネント
-│   ├── schemas/      # Zodバリデーションスキーマ
-│   └── main.tsx      # エントリーポイント
+│   ├── lib/                      # API層とユーティリティ
+│   │   ├── supabaseClient.ts     # Supabase初期化
+│   │   ├── types.ts              # 共通型定義
+│   │   ├── fieldsApi.ts          # 現場API（全CRUD + 検索）
+│   │   ├── errorMessages.ts      # エラーメッセージ翻訳
+│   │   └── utils.ts              # ユーティリティ関数
+│   ├── pages/                    # ページコンポーネント
+│   │   ├── LoginPage.tsx         # ログイン画面
+│   │   ├── DashboardPage.tsx     # ダッシュボード（未実装）
+│   │   ├── FieldListPage.tsx     # 現場一覧・検索・削除
+│   │   └── FieldFormPage.tsx     # 現場作成・編集フォーム
+│   ├── components/               # UIコンポーネント
+│   │   ├── ui/                   # Radix UI ベースコンポーネント
+│   │   │   ├── button.tsx
+│   │   │   ├── input.tsx
+│   │   │   ├── card.tsx
+│   │   │   ├── dialog.tsx
+│   │   │   ├── label.tsx
+│   │   │   ├── textarea.tsx
+│   │   │   ├── checkbox.tsx
+│   │   │   └── badge.tsx
+│   │   └── FieldCard.tsx         # 現場カード表示
+│   ├── schemas/                  # Zodバリデーションスキーマ
+│   │   └── fieldSchema.ts
+│   ├── App.tsx                   # ルーティング・認証チェック
+│   └── main.tsx                  # エントリーポイント
 ├── supabase/
-│   ├── migrations/   # データベースマイグレーション
-│   └── config.toml   # Supabase設定
-└── package.json
+│   ├── config.toml               # Supabaseローカル設定
+│   └── migrations/
+│       └── 20260110000000_initial_schema.sql  # 全テーブル定義
+├── .env.local.example            # 環境変数サンプル
+├── package.json
+├── vite.config.ts
+├── tailwind.config.js
+└── tsconfig.json
 ```
 
-## 主要機能（Phase 1）
+---
 
-- [x] プロジェクトセットアップ
-- [x] Supabaseローカル環境構築
-- [ ] 現場マスタ管理（CRUD）
-- [ ] 案件記録機能
-- [ ] 日別作業記録＋従事者稼働管理
-- [ ] ダッシュボード・分析機能
-- [ ] 履歴表示機能
+## データベーススキーマ
 
-## ライセンス
+### 5.1 メインテーブル
 
-MIT
+#### fields（現場マスタ）
 
-## 作成者
+現場の基本情報と設備情報を管理。
 
-Claude Code
+| カラム名 | 型 | 制約 | 説明 |
+|---------|---|------|------|
+| id | UUID | PRIMARY KEY | 現場ID（自動生成） |
+| field_code | VARCHAR(50) | UNIQUE NOT NULL | 現場コード（例: KT-0001） |
+| field_name | VARCHAR(255) | NOT NULL | 現場名（例: 金城公園） |
+| customer_name | VARCHAR(255) | NULL | 顧客名 |
+| address | TEXT | NULL | 現場住所 |
+| has_electricity | BOOLEAN | DEFAULT FALSE | 電気使用可否 |
+| has_water | BOOLEAN | DEFAULT FALSE | 水道利用可否 |
+| has_toilet | BOOLEAN | DEFAULT FALSE | トイレ使用可否 |
+| toilet_distance | VARCHAR(100) | NULL | トイレまでの距離（例: 徒歩5分） |
+| travel_distance_km | NUMERIC(10, 2) | NULL | 往復移動距離（km） |
+| travel_time_minutes | INTEGER | NULL | 往復移動時間（分） |
+| travel_cost | INTEGER | NULL | 往復移動費（円） |
+| notes | TEXT | NULL | 現場備考 |
+| warnings | TEXT | NULL | 注意事項 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時（自動） |
+| created_by | UUID | FK → auth.users(id) | 作成者 |
+
+**インデックス:**
+- `idx_fields_code` on `field_code`
+- `idx_fields_created_by` on `created_by`
+
+**RLSポリシー:**
+- SELECT: 全ユーザーが閲覧可能
+- INSERT: 認証済みユーザーが作成可能（created_by = auth.uid()）
+- UPDATE: 認証済みユーザー全員が更新可能
+- DELETE: 認証済みユーザー全員が削除可能
+
+#### projects（案件）
+
+1つの現場で実施する案件（実施日ごと）を記録。
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|---|------|------|
+| id | UUID | PRIMARY KEY | 案件ID（自動生成） |
+| field_id | UUID | FK → fields(id) ON DELETE RESTRICT | 現場ID |
+| project_number | INTEGER | NOT NULL | 現場内案件番号（#1, #2...） |
+| implementation_date | DATE | NOT NULL | 実施日 |
+| work_type_pruning | BOOLEAN | NULL | 剪定作業 |
+| work_type_weeding | BOOLEAN | NULL | 除草作業 |
+| work_type_cleaning | BOOLEAN | NULL | 清掃作業 |
+| work_type_other | VARCHAR(255) | NULL | その他作業内容 |
+| estimate_amount | INTEGER | NULL | 見積金額 |
+| invoice_amount | INTEGER | NULL | 請求金額 |
+| labor_cost | INTEGER | NULL | 人件費（手入力） |
+| expense_total | INTEGER | NULL | 経費合計（自動計算） |
+| review_good_points | TEXT | NULL | 良かった点 |
+| review_improvements | TEXT | NULL | 改善点 |
+| review_next_actions | TEXT | NULL | 次回への申し送り |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時（自動） |
+| created_by | UUID | FK → auth.users(id) | 作成者 |
+
+**複合ユニーク制約:** `(field_id, project_number)`
+
+**インデックス:**
+- `idx_projects_field` on `field_id`
+- `idx_projects_date` on `implementation_date DESC`
+
+**RLSポリシー:**
+- SELECT: 全ユーザーが閲覧可能
+- INSERT: 認証済みユーザーが作成可能（created_by = auth.uid()）
+- UPDATE: 認証済みユーザー全員が更新可能
+- DELETE: 認証済みユーザー全員が削除可能
+
+#### work_days（日別作業記録）
+
+1つの案件を複数日に分けて作業する場合の日別記録。
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|---|------|------|
+| id | UUID | PRIMARY KEY | 記録ID（自動生成） |
+| project_id | UUID | FK → projects(id) ON DELETE RESTRICT | 案件ID |
+| work_date | DATE | NOT NULL | 作業日 |
+| day_number | INTEGER | NOT NULL | 作業日の連番（1日目、2日目...） |
+| weather | JSONB | NULL | 時刻ごとの天候（例: [{"time":"08:00","condition":"晴れ,強風"}]） |
+| work_description | TEXT | NULL | 作業内容詳細 |
+| troubles | TEXT | NULL | トラブル・特記事項 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時（自動） |
+
+**複合ユニーク制約:** `(project_id, day_number)`
+
+**インデックス:**
+- `idx_work_days_project` on `project_id`
+- `idx_work_days_date` on `work_date DESC`
+
+**RLSポリシー:**
+- ALL: 認証済みユーザー全員が全操作可能
+
+#### work_records（従事者稼働記録）
+
+日別作業に従事した作業者の稼働時間記録。
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|---|------|------|
+| id | UUID | PRIMARY KEY | 記録ID（自動生成） |
+| work_day_id | UUID | FK → work_days(id) ON DELETE RESTRICT | 作業日ID |
+| employee_code | VARCHAR(50) | NOT NULL | 従業員コード |
+| start_time | TIME | NOT NULL | 開始時刻 |
+| end_time | TIME | NOT NULL | 終了時刻 |
+| working_hours | NUMERIC(4, 2) | NULL | 稼働時間（自動計算） |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時（自動） |
+
+**複合ユニーク制約:** `(work_day_id, employee_code)`
+
+**インデックス:**
+- `idx_work_records_work_day` on `work_day_id`
+- `idx_work_records_employee` on `employee_code`
+
+**RLSポリシー:**
+- ALL: 認証済みユーザー全員が全操作可能
+
+#### expenses（経費）
+
+案件に紐づく経費記録。
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|---|------|------|
+| id | UUID | PRIMARY KEY | 経費ID（自動生成） |
+| project_id | UUID | FK → projects(id) ON DELETE RESTRICT | 案件ID |
+| expense_item | VARCHAR(255) | NOT NULL | 経費項目（例: ガソリン代） |
+| amount | INTEGER | NOT NULL | 金額 |
+| notes | TEXT | NULL | 備考 |
+| expense_date | DATE | NULL | 経費発生日 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時（自動） |
+
+**インデックス:**
+- `idx_expenses_project` on `project_id`
+- `idx_expenses_date` on `expense_date DESC`
+
+**RLSポリシー:**
+- ALL: 認証済みユーザー全員が全操作可能
+
+### 5.2 履歴テーブル
+
+DELETE/UPDATE時に自動的にデータを退避する履歴テーブル。
+
+**テーブル一覧:**
+- `fields_history`
+- `projects_history`
+- `work_days_history`
+- `work_records_history`
+- `expenses_history`
+
+**共通カラム（元テーブルのカラム + 以下）:**
+- `history_id`: UUID PRIMARY KEY（履歴ID）
+- `operation_type`: VARCHAR(10)（UPDATE or DELETE）
+- `operation_at`: TIMESTAMPTZ（操作日時）
+- `operation_by`: UUID（操作者）
+- `reason`: TEXT（理由・備考）
+
+**RLSポリシー:**
+- SELECT: 全ユーザーが閲覧可能
+- INSERT: システムのみ（トリガー経由）
+
+### 5.3 トリガー・関数
+
+#### 1. update_updated_at_column()
+
+すべてのメインテーブルで`updated_at`を自動更新。
+
+```sql
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 各テーブルに適用
+CREATE TRIGGER update_fields_updated_at BEFORE UPDATE ON fields FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- (projects, work_days, work_records, expenses も同様)
+```
+
+#### 2. calculate_working_hours()
+
+`work_records`の`working_hours`を自動計算（end_time - start_time）。
+
+```sql
+CREATE OR REPLACE FUNCTION calculate_working_hours()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.working_hours = EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) / 3600;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER calculate_working_hours_trigger BEFORE INSERT OR UPDATE ON work_records FOR EACH ROW EXECUTE FUNCTION calculate_working_hours();
+```
+
+#### 3. archive_*_to_history()
+
+DELETE/UPDATE時に履歴テーブルにデータを自動コピー（各テーブルごと）。
+
+```sql
+CREATE OR REPLACE FUNCTION archive_fields_to_history()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO fields_history (id, field_code, ..., operation_type, operation_at, operation_by)
+  VALUES (OLD.id, OLD.field_code, ..., TG_OP, NOW(), auth.uid());
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER archive_fields_trigger AFTER UPDATE OR DELETE ON fields FOR EACH ROW EXECUTE FUNCTION archive_fields_to_history();
+-- (projects, work_days, work_records, expenses も同様)
+```
+
+### 5.4 ビュー
+
+#### fields_full_history
+
+現在の`fields`テーブルと`fields_history`を統合したビュー。
+
+```sql
+CREATE VIEW fields_full_history AS
+SELECT id, field_code, field_name, ..., 'CURRENT' as operation_type, updated_at as operation_at, created_by as operation_by
+FROM fields
+UNION ALL
+SELECT id, field_code, field_name, ..., operation_type, operation_at, operation_by
+FROM fields_history
+ORDER BY operation_at DESC;
+```
+
+### 5.5 リアルタイム購読設定
+
+すべてのメインテーブルでSupabase Realtimeが有効化されています。
+
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE fields;
+ALTER PUBLICATION supabase_realtime ADD TABLE projects;
+ALTER PUBLICATION supabase_realtime ADD TABLE work_days;
+ALTER PUBLICATION supabase_realtime ADD TABLE work_records;
+ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
+```
+
+---
+
+## 実装済み機能
+
+### Phase 1: 認証機能（完了 ✅）
+
+**実装内容:**
+- Supabase Auth（メール/パスワード認証）
+- ログイン画面（LoginPage.tsx）
+- セッション管理（App.tsx）
+- 自動ログインチェック
+
+**主要ファイル:**
+- `src/pages/LoginPage.tsx`: ログインフォーム、エラー表示
+- `src/lib/supabaseClient.ts`: Supabase初期化
+- `src/App.tsx`: ルーティング、認証状態管理
+
+**機能:**
+- メールアドレス・パスワードでログイン
+- ログイン失敗時のエラーメッセージ表示
+- セッション維持（リロード後も自動ログイン）
+- ログアウト機能
+
+### Phase 2: 現場マスタ管理（完了 ✅）
+
+**実装内容:**
+- 現場CRUD（作成・読取・更新・削除）
+- 統合検索機能（現場コード・現場名・住所・顧客名）
+- フォームバリデーション（Zod）
+- エラーメッセージ日本語化
+- トースト通知（Sonner）
+- 削除時の履歴自動退避
+
+**主要ファイル:**
+- `src/pages/FieldListPage.tsx`: 現場一覧・検索・削除
+- `src/pages/FieldFormPage.tsx`: 現場作成・編集フォーム
+- `src/components/FieldCard.tsx`: 現場カード表示
+- `src/lib/fieldsApi.ts`: 現場API（全CRUD + 検索）
+- `src/schemas/fieldSchema.ts`: Zodバリデーションスキーマ
+- `src/lib/errorMessages.ts`: エラーメッセージ翻訳
+
+**機能詳細:**
+
+#### 現場一覧（FieldListPage）
+- 全現場を現場コード順に表示
+- 検索機能（現場コード・現場名・住所・顧客名を対象）
+- 検索結果のリアルタイム表示
+- 「新規登録」ボタン
+- 各現場に「編集」「削除」ボタン
+- 削除確認ダイアログ
+- ローディング表示
+- エラー表示
+
+#### 現場作成・編集（FieldFormPage）
+- フォームセクション:
+  - 基本情報（現場コード、現場名、顧客名、住所）
+  - 現場環境（電気・水道・トイレの有無、トイレまでの距離）
+  - 移動費情報（往復移動距離・時間・費用）
+  - 備考・注意事項
+- リアルタイムバリデーション
+- エラーメッセージ表示（日本語）
+- 保存成功時のトースト通知
+- キャンセルボタン
+
+#### API層（fieldsApi.ts）
+- `listAllFields()`: 全現場取得
+- `getFieldById(id)`: ID指定で現場取得
+- `searchFieldsByCode(term)`: 現場コード検索
+- `searchFieldsByName(term)`: 現場名検索
+- `searchFields(term)`: 統合検索（コード・名・住所・顧客名）
+- `createField(field)`: 現場作成（created_byを自動設定）
+- `updateField(id, field)`: 現場更新
+- `deleteField(id)`: 現場削除（履歴に自動退避）
+
+#### エラーハンドリング
+- Supabaseエラーの日本語翻訳
+- 重複エラー（現場コード）
+- RLSポリシー違反
+- NOT NULL制約違反
+- 外部キー制約違反
+- バリデーションエラー（Zod）
+
+#### バリデーション（fieldSchema.ts）
+- 現場コード: 必須、50文字以内
+- 現場名: 必須、255文字以内
+- 顧客名: 255文字以内
+- 移動距離: 0以上、NaN対応
+- 移動時間: 整数、0以上、NaN対応
+- 移動費: 整数、0以上、NaN対応
+
+---
+
+## 未実装機能
+
+### Phase 3: 案件管理（未実装）
+
+**概要:** 現場ごとの案件（実施日ごとの作業）を記録・管理。
+
+**実装予定:**
+- 案件一覧表示（現場ごと）
+- 案件作成フォーム
+  - 現場選択（プルダウン）
+  - 実施日
+  - 作業種別（剪定・除草・清掃・その他）
+  - 見積金額・請求金額
+  - 人件費
+  - レビュー（良かった点・改善点・次回申し送り）
+- 案件編集・削除
+- 案件検索（現場・日付範囲）
+
+**主要API:**
+- `listProjectsByField(fieldId)`: 現場ごとの案件一覧
+- `getProjectById(id)`: 案件詳細取得
+- `createProject(project)`: 案件作成
+- `updateProject(id, project)`: 案件更新
+- `deleteProject(id)`: 案件削除（履歴に退避）
+
+### Phase 4: 日別作業記録・従事者稼働管理（未実装）
+
+**概要:** 1つの案件を複数日に分けて作業する場合の記録と、従事者の稼働時間管理。
+
+**実装予定:**
+
+#### 日別作業記録（work_days）
+- 作業日追加フォーム
+  - 作業日
+  - 天候（時刻ごと、JSONB配列）
+  - 作業内容詳細
+  - トラブル・特記事項
+- 作業日一覧表示（案件ごと）
+- 作業日編集・削除
+
+#### 従事者稼働記録（work_records）
+- 稼働記録追加フォーム
+  - 従業員コード（プルダウンまたは入力）
+  - 開始時刻
+  - 終了時刻
+  - 稼働時間（自動計算）
+- 稼働記録一覧表示（作業日ごと）
+- 稼働記録編集・削除
+- 稼働時間集計（従業員別・案件別）
+
+#### 経費記録（expenses）
+- 経費追加フォーム
+  - 経費項目
+  - 金額
+  - 発生日
+  - 備考
+- 経費一覧表示（案件ごと）
+- 経費編集・削除
+- 経費合計自動計算（案件ごと）
+
+**主要API:**
+- `listWorkDaysByProject(projectId)`
+- `createWorkDay(workDay)`
+- `updateWorkDay(id, workDay)`
+- `deleteWorkDay(id)`
+- `listWorkRecordsByWorkDay(workDayId)`
+- `createWorkRecord(record)`
+- `updateWorkRecord(id, record)`
+- `deleteWorkRecord(id)`
+- `listExpensesByProject(projectId)`
+- `createExpense(expense)`
+- `updateExpense(id, expense)`
+- `deleteExpense(id)`
+
+### Phase 5: ダッシュボード・分析機能（未実装）
+
+**概要:** 収益性分析、従業員稼働分析、案件の時系列変化を可視化。
+
+**実装予定:**
+
+#### ダッシュボード（DashboardPage）
+- 直近30日の案件数
+- 今月の売上（請求金額合計）
+- 今月の人件費・経費
+- 粗利益率
+- 現場数・案件数の推移グラフ
+
+#### 分析機能
+- 現場別収益性レポート
+  - 売上・人件費・経費・粗利益
+  - 移動費率
+  - 案件数推移
+- 従業員稼働分析
+  - 従業員別稼働時間
+  - 期間指定集計
+- 案件レビュー一覧
+  - 良かった点・改善点の蓄積
+  - 次回申し送り事項の確認
+
+#### 履歴表示機能
+- 現場履歴表示（fields_full_history ビュー利用）
+- 案件履歴表示
+- 変更履歴追跡（誰がいつ変更したか）
+
+**技術要素:**
+- グラフライブラリ（Recharts or Chart.js）
+- 日付範囲選択（react-day-picker）
+- CSV/Excelエクスポート
+
+---
+
+## トラブルシューティング
+
+### Supabaseローカル環境が起動しない
+
+```bash
+# Dockerが起動しているか確認
+docker ps
+
+# Supabaseコンテナを停止して再起動
+npx supabase stop
+npx supabase start
+```
+
+### データベースリセット後にテストユーザーがいない
+
+```bash
+# psqlで接続してテストユーザーを再作成
+psql postgresql://postgres:postgres@127.0.0.1:54622/postgres
+```
+
+上記の「テストユーザー作成」のSQLを再実行してください。
+
+### ログイン時に403エラー
+
+- RLSポリシーの確認
+- auth.usersにユーザーが存在するか確認
+
+```sql
+SELECT * FROM auth.users WHERE email = 'test@example.com';
+```
+
+### 現場更新時に406エラー
+
+- RLSポリシーのUSING句・WITH CHECK句を確認
+- created_byがNULLでないか確認
+
+```sql
+SELECT id, field_code, created_by FROM fields;
+```
+
+### Tailwind CSS v4エラー
+
+- Tailwind CSS 3.4.17にダウングレード済み
+- `tailwind.config.js`でCSS変数設定済み
+
+問題が発生した場合は、`package.json`でTailwind CSSのバージョンを確認してください。
+
+---
+
+## Git管理
+
+**リモートリポジトリ:** https://github.com/lietsee/niwalog-app
+
+**ブランチ:** main
+
+**コミット履歴（最新）:**
+1. `b22964e` - fix: RLSポリシーを変更し全認証ユーザーが編集可能に
+2. `b3bd71c` - fix: Downgrade Tailwind CSS to v3.4.17 and configure CSS variables
+3. `b8e853e` - feat: 検索機能を拡張（住所・顧客名対応）
+4. `766ac36` - fix: フォームバリデーションとエラーメッセージ改善
+5. `96f55ad` - fix: RLSポリシー修正（UPDATE/DELETE対応）
+6. `d74e368` - feat: Phase 2 現場マスタ管理（Fields CRUD）完成
+7. `67ba474` - feat: Phase 1 authentication and basic UI components
+
+---
+
+## ライセンス・作成者
+
+- **ライセンス:** MIT
+- **作成者:** Claude Code with lietsee
