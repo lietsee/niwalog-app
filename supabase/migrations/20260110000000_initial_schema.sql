@@ -660,7 +660,8 @@ WITH CHECK (auth.uid() = created_by);
 -- 作成者のみが現場を更新可能
 CREATE POLICY "Users can update their own fields"
 ON fields FOR UPDATE
-USING (auth.uid() = created_by);
+USING (auth.uid() = created_by)
+WITH CHECK (auth.uid() = created_by);
 
 -- 作成者のみが現場を削除可能
 CREATE POLICY "Users can delete their own fields"
@@ -704,18 +705,23 @@ CREATE POLICY "Authenticated users can manage expenses" ON expenses FOR ALL USIN
 -- 履歴テーブルのRLS（閲覧のみ許可、編集・削除は不可）
 ALTER TABLE fields_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view fields history" ON fields_history FOR SELECT USING (true);
+CREATE POLICY "System can archive fields history" ON fields_history FOR INSERT WITH CHECK (true);
 
 ALTER TABLE projects_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view projects history" ON projects_history FOR SELECT USING (true);
+CREATE POLICY "System can archive projects history" ON projects_history FOR INSERT WITH CHECK (true);
 
 ALTER TABLE work_days_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view work_days history" ON work_days_history FOR SELECT USING (true);
+CREATE POLICY "System can archive work_days history" ON work_days_history FOR INSERT WITH CHECK (true);
 
 ALTER TABLE work_records_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view work_records history" ON work_records_history FOR SELECT USING (true);
+CREATE POLICY "System can archive work_records history" ON work_records_history FOR INSERT WITH CHECK (true);
 
 ALTER TABLE expenses_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view expenses history" ON expenses_history FOR SELECT USING (true);
+CREATE POLICY "System can archive expenses history" ON expenses_history FOR INSERT WITH CHECK (true);
 
 -- ============================================================================
 -- リアルタイム機能の有効化
