@@ -657,16 +657,16 @@ CREATE POLICY "Users can insert their own fields"
 ON fields FOR INSERT
 WITH CHECK (auth.uid() = created_by);
 
--- 作成者のみが現場を更新可能
-CREATE POLICY "Users can update their own fields"
+-- 認証済みユーザーが現場を更新可能
+CREATE POLICY "Authenticated users can update fields"
 ON fields FOR UPDATE
-USING (auth.uid() = created_by)
-WITH CHECK (auth.uid() = created_by);
+USING (auth.role() = 'authenticated')
+WITH CHECK (auth.role() = 'authenticated');
 
--- 作成者のみが現場を削除可能
-CREATE POLICY "Users can delete their own fields"
+-- 認証済みユーザーが現場を削除可能
+CREATE POLICY "Authenticated users can delete fields"
 ON fields FOR DELETE
-USING (auth.uid() = created_by);
+USING (auth.role() = 'authenticated');
 
 -- projectsテーブルのRLS有効化
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
@@ -681,15 +681,16 @@ CREATE POLICY "Users can insert projects"
 ON projects FOR INSERT
 WITH CHECK (auth.uid() = created_by);
 
--- 作成者のみが案件を更新可能
-CREATE POLICY "Users can update their own projects"
+-- 認証済みユーザーが案件を更新可能
+CREATE POLICY "Authenticated users can update projects"
 ON projects FOR UPDATE
-USING (auth.uid() = created_by);
+USING (auth.role() = 'authenticated')
+WITH CHECK (auth.role() = 'authenticated');
 
--- 作成者のみが案件を削除可能
-CREATE POLICY "Users can delete their own projects"
+-- 認証済みユーザーが案件を削除可能
+CREATE POLICY "Authenticated users can delete projects"
 ON projects FOR DELETE
-USING (auth.uid() = created_by);
+USING (auth.role() = 'authenticated');
 
 -- work_days, work_records, expensesテーブルのRLS
 -- （簡略版: 認証済みユーザーは全操作可能）
