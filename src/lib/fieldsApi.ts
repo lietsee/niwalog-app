@@ -135,6 +135,37 @@ export async function searchFieldsByName(
 }
 
 /**
+ * 統合検索（現場コード、現場名、住所、顧客名を対象）
+ */
+export async function searchFields(
+  searchTerm: string
+): Promise<ApiResponse<Field[]>> {
+  try {
+    const { data, error } = await supabase
+      .from('fields')
+      .select('*')
+      .or(
+        `field_code.ilike.%${searchTerm}%,field_name.ilike.%${searchTerm}%,address.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%`
+      )
+      .order('field_code')
+
+    if (error) {
+      console.error('Supabase error:', error)
+      return { data: null, error: error.message, status: 400 }
+    }
+
+    return { data: data || [], error: null, status: 200 }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    return {
+      data: null,
+      error: 'システムエラーが発生しました',
+      status: 500,
+    }
+  }
+}
+
+/**
  * 現場作成
  */
 export async function createField(

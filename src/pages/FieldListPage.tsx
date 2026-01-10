@@ -15,8 +15,7 @@ import {
 import { FieldCard } from '@/components/FieldCard'
 import {
   listAllFields,
-  searchFieldsByCode,
-  searchFieldsByName,
+  searchFields,
   deleteField,
   type Field,
 } from '@/lib/fieldsApi'
@@ -62,23 +61,16 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
     setLoading(true)
     setError(null)
 
-    // 現場コードと現場名の両方で検索
-    const [codeResult, nameResult] = await Promise.all([
-      searchFieldsByCode(searchTerm),
-      searchFieldsByName(searchTerm),
-    ])
+    // 統合検索（現場コード、現場名、住所、顧客名）
+    const { data, error: err } = await searchFields(searchTerm)
 
-    // 結果をマージ（重複を除く）
-    const codeFields = codeResult.data || []
-    const nameFields = nameResult.data || []
-    const mergedFields = [
-      ...codeFields,
-      ...nameFields.filter(
-        (nf) => !codeFields.some((cf) => cf.id === nf.id)
-      ),
-    ]
+    if (err) {
+      setError(err)
+      toast.error(`検索に失敗しました: ${err}`)
+    } else {
+      setFields(data || [])
+    }
 
-    setFields(mergedFields)
     setLoading(false)
   }
 
