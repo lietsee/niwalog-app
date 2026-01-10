@@ -51,6 +51,10 @@ export type Project = {
 // Page Type for routing
 export type Page =
   | 'login'
+  | 'dashboard'
   | 'field-list'
   | 'field-form'
-  | 'dashboard'
+  | 'project-list'
+  | 'project-form'
+  | 'work-day-form'
+  | 'history'
