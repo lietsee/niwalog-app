@@ -23,26 +23,28 @@ export const fieldSchema = z.object({
     .max(100, 'トイレまでの距離は100文字以内で入力してください')
     .nullable()
     .optional(),
-  travel_distance_km: z
-    .number()
-    .min(0, '移動距離は0以上で入力してください')
-    .nullable()
-    .optional()
-    .or(z.literal('').transform(() => null)),
-  travel_time_minutes: z
-    .number()
-    .int('移動時間は整数で入力してください')
-    .min(0, '移動時間は0以上で入力してください')
-    .nullable()
-    .optional()
-    .or(z.literal('').transform(() => null)),
-  travel_cost: z
-    .number()
-    .int('移動費は整数で入力してください')
-    .min(0, '移動費は0以上で入力してください')
-    .nullable()
-    .optional()
-    .or(z.literal('').transform(() => null)),
+  travel_distance_km: z.preprocess(
+    (val) => (typeof val === 'number' && isNaN(val) ? null : val),
+    z.number().min(0, '移動距離は0以上で入力してください').nullable().optional()
+  ),
+  travel_time_minutes: z.preprocess(
+    (val) => (typeof val === 'number' && isNaN(val) ? null : val),
+    z
+      .number()
+      .int('移動時間は整数で入力してください')
+      .min(0, '移動時間は0以上で入力してください')
+      .nullable()
+      .optional()
+  ),
+  travel_cost: z.preprocess(
+    (val) => (typeof val === 'number' && isNaN(val) ? null : val),
+    z
+      .number()
+      .int('移動費は整数で入力してください')
+      .min(0, '移動費は0以上で入力してください')
+      .nullable()
+      .optional()
+  ),
   notes: z.string().nullable().optional(),
   warnings: z.string().nullable().optional(),
 })

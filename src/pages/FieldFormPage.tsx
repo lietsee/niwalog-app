@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
 import { ArrowLeft, Save } from 'lucide-react'
+import { translateSupabaseError } from '@/lib/errorMessages'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -165,7 +166,9 @@ export function FieldFormPage({ onNavigate, fieldId }: FieldFormPageProps) {
         {error && (
           <Card className="mb-6 border-destructive">
             <CardContent className="py-4">
-              <p className="text-destructive">エラー: {error}</p>
+              <p className="text-destructive">
+                エラー: {translateSupabaseError(error)}
+              </p>
             </CardContent>
           </Card>
         )}
