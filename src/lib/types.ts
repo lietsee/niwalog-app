@@ -136,6 +136,58 @@ export type RecentProject = {
   invoiceAmount: number | null
 }
 
+// Field Profitability Report
+export type FieldProfitabilityReport = {
+  fieldId: string
+  fieldCode: string
+  fieldName: string
+  customerName: string | null
+  totalInvoice: number
+  totalLaborCost: number
+  totalExpense: number
+  profit: number
+  profitMargin: number
+  projectCount: number
+  travelCost: number | null
+}
+
+// Project Review
+export type ProjectReview = {
+  id: string
+  fieldName: string
+  fieldCode: string
+  projectNumber: number
+  implementationDate: string
+  goodPoints: string | null
+  improvements: string | null
+  nextActions: string | null
+}
+
+// Field History Record
+export type FieldHistoryRecord = {
+  id: string
+  fieldCode: string
+  fieldName: string
+  customerName: string | null
+  address: string | null
+  status: 'CURRENT' | 'UPDATE' | 'DELETE'
+  operationAt: string
+  operationBy: string | null
+}
+
+// Project History Record
+export type ProjectHistoryRecord = {
+  id: string
+  fieldId: string
+  fieldCode: string
+  fieldName: string
+  projectNumber: number
+  implementationDate: string
+  operationType: string
+  operationAt: string
+  operationBy: string | null
+}
+
 // Page Type for routing
 export type Page =
   | 'login'
@@ -147,4 +199,5 @@ export type Page =
   | 'project-detail'
   | 'work-day-form'
   | 'expense-form'
+  | 'analysis'
   | 'history'

@@ -10,6 +10,8 @@ import { ProjectFormPage } from '@/pages/ProjectFormPage'
 import { ProjectDetailPage } from '@/pages/ProjectDetailPage'
 import { WorkDayFormPage } from '@/pages/WorkDayFormPage'
 import { ExpenseFormPage } from '@/pages/ExpenseFormPage'
+import { AnalysisPage } from '@/pages/AnalysisPage'
+import { HistoryPage } from '@/pages/HistoryPage'
 import type { Page } from '@/lib/types'
 
 function App() {
@@ -152,6 +154,12 @@ function App() {
             onBack={() => handleNavigate('project-detail', selectedProjectId)}
             onSuccess={() => handleNavigate('project-detail', selectedProjectId)}
           />
+        )}
+        {currentPage === 'analysis' && (
+          <AnalysisPage onNavigate={handleNavigate} />
+        )}
+        {currentPage === 'history' && (
+          <HistoryPage onNavigate={handleNavigate} />
         )}
       </div>
       <Toaster position="top-right" />

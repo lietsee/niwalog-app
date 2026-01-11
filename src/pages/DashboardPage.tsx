@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { MapPin, Briefcase, TrendingUp, Receipt, Users } from 'lucide-react'
+import { MapPin, Briefcase, TrendingUp, Receipt, Users, BarChart3, History } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { StatCard } from '@/components/StatCard'
 import { MonthlyChart } from '@/components/MonthlyChart'
@@ -15,7 +15,7 @@ import {
 import type { DashboardSummary, MonthlyStats, RecentProject, EmployeeWorkSummary } from '@/lib/types'
 
 interface DashboardPageProps {
-  onNavigate: (page: 'field-list') => void
+  onNavigate: (page: 'field-list' | 'analysis' | 'history') => void
 }
 
 function formatCurrency(value: number): string {
@@ -91,10 +91,20 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             <h1 className="text-3xl font-bold">ダッシュボード</h1>
             <p className="text-muted-foreground">NiwaLog - 現場記録管理システム</p>
           </div>
-          <Button onClick={() => onNavigate('field-list')}>
-            <MapPin className="h-4 w-4 mr-2" />
-            現場一覧
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onNavigate('analysis')}>
+              <BarChart3 className="h-4 w-4 mr-2" />
+              分析
+            </Button>
+            <Button variant="outline" onClick={() => onNavigate('history')}>
+              <History className="h-4 w-4 mr-2" />
+              履歴
+            </Button>
+            <Button onClick={() => onNavigate('field-list')}>
+              <MapPin className="h-4 w-4 mr-2" />
+              現場一覧
+            </Button>
+          </div>
         </div>
 
         {/* サマリーカード */}
