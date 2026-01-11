@@ -91,7 +91,7 @@ export function WorkRecordInput({ value, onChange, errors }: WorkRecordInputProp
   const addRecord = () => {
     const newRecord: WorkRecordInputType = {
       employee_code: '',
-      clock_in: '07:30',
+      clock_in: '08:00',
       site_arrival: '08:30',
       site_departure: '16:00',
       clock_out: '17:00',
