@@ -10,6 +10,8 @@ import { ProjectFormPage } from '@/pages/ProjectFormPage'
 import { ProjectDetailPage } from '@/pages/ProjectDetailPage'
 import { WorkDayFormPage } from '@/pages/WorkDayFormPage'
 import { ExpenseFormPage } from '@/pages/ExpenseFormPage'
+import { EmployeeListPage } from '@/pages/EmployeeListPage'
+import { EmployeeFormPage } from '@/pages/EmployeeFormPage'
 import { AnalysisPage } from '@/pages/AnalysisPage'
 import { HistoryPage } from '@/pages/HistoryPage'
 import type { Page } from '@/lib/types'
@@ -30,6 +32,9 @@ function App() {
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | undefined>(
     undefined
   )
+  const [selectedEmployeeCode, setSelectedEmployeeCode] = useState<string | undefined>(
+    undefined
+  )
 
   const handleNavigate = (page: Page, id?: string) => {
     setCurrentPage(page)
@@ -48,6 +53,8 @@ function App() {
       setSelectedWorkDayId(id)
     } else if (page === 'expense-form') {
       setSelectedExpenseId(id)
+    } else if (page === 'employee-form') {
+      setSelectedEmployeeCode(id)
     }
   }
 
@@ -153,6 +160,15 @@ function App() {
             expenseId={selectedExpenseId}
             onBack={() => handleNavigate('project-detail', selectedProjectId)}
             onSuccess={() => handleNavigate('project-detail', selectedProjectId)}
+          />
+        )}
+        {currentPage === 'employee-list' && (
+          <EmployeeListPage onNavigate={handleNavigate} />
+        )}
+        {currentPage === 'employee-form' && (
+          <EmployeeFormPage
+            onNavigate={handleNavigate}
+            employeeCode={selectedEmployeeCode}
           />
         )}
         {currentPage === 'analysis' && (

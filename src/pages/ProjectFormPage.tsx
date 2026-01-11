@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Calculator } from 'lucide-react'
 import { translateSupabaseError } from '@/lib/errorMessages'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +12,14 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   createProject,
   updateProject,
   getProjectById,
@@ -19,6 +27,7 @@ import {
   type ProjectInput,
 } from '@/lib/projectsApi'
 import { getFieldById, type Field } from '@/lib/fieldsApi'
+import { calculateLaborCost, type LaborCostResult } from '@/lib/laborCostApi'
 import { projectSchema, type ProjectFormData } from '@/schemas/projectSchema'
 
 interface ProjectFormPageProps {
@@ -38,6 +47,9 @@ export function ProjectFormPage({
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [laborCostDialogOpen, setLaborCostDialogOpen] = useState(false)
+  const [laborCostResult, setLaborCostResult] = useState<LaborCostResult | null>(null)
+  const [calculating, setCalculating] = useState(false)
   const isEditMode = !!projectId
 
   const {
@@ -164,6 +176,40 @@ export function ProjectFormPage({
         onSuccess()
       }
     }
+  }
+
+  const handleCalculateLaborCost = async () => {
+    if (!projectId) {
+      toast.error('人件費計算は案件保存後に利用できます')
+      return
+    }
+
+    setCalculating(true)
+    const { data, error: err } = await calculateLaborCost(projectId)
+
+    if (err) {
+      toast.error(`人件費計算に失敗しました: ${translateSupabaseError(err)}`)
+      setCalculating(false)
+      return
+    }
+
+    setLaborCostResult(data)
+    setLaborCostDialogOpen(true)
+    setCalculating(false)
+  }
+
+  const handleApplyLaborCost = () => {
+    if (laborCostResult) {
+      setValue('labor_cost', laborCostResult.total)
+      setLaborCostDialogOpen(false)
+      toast.success('人件費を反映しました')
+    }
+  }
+
+  const salaryTypeLabels: Record<string, string> = {
+    hourly: '時給',
+    daily: '日給月給',
+    monthly: '月給',
   }
 
   if (loading) {
@@ -368,6 +414,23 @@ export function ProjectFormPage({
                   )}
                 </div>
               </div>
+
+              {isEditMode && (
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCalculateLaborCost}
+                    disabled={calculating}
+                  >
+                    <Calculator className="h-4 w-4 mr-2" />
+                    {calculating ? '計算中...' : '人件費を自動計算'}
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    従事者稼働記録と従業員マスタから人件費を計算します
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -430,6 +493,85 @@ export function ProjectFormPage({
           </div>
         </form>
       </div>
+
+      {/* 人件費計算結果ダイアログ */}
+      <Dialog open={laborCostDialogOpen} onOpenChange={setLaborCostDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>人件費計算結果</DialogTitle>
+            <DialogDescription>
+              従事者稼働記録から計算した人件費です
+            </DialogDescription>
+          </DialogHeader>
+
+          {laborCostResult && (
+            <div className="space-y-4">
+              <div className="text-center py-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">合計人件費</p>
+                <p className="text-3xl font-bold">
+                  {laborCostResult.total.toLocaleString()}円
+                </p>
+              </div>
+
+              {laborCostResult.details.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">内訳</p>
+                  <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
+                    {laborCostResult.details.map((detail) => (
+                      <div
+                        key={detail.employee_code}
+                        className="flex items-center justify-between p-2 text-sm"
+                      >
+                        <div>
+                          <span className="font-medium">{detail.name}</span>
+                          <span className="text-muted-foreground ml-2">
+                            ({salaryTypeLabels[detail.salary_type]})
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <p>{detail.cost.toLocaleString()}円</p>
+                          <p className="text-xs text-muted-foreground">
+                            {detail.hours.toFixed(1)}時間
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-between text-sm pt-2 border-t">
+                    <span>時給計</span>
+                    <span>{laborCostResult.breakdown.hourly.toLocaleString()}円</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>日給月給計</span>
+                    <span>{laborCostResult.breakdown.daily.toLocaleString()}円</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>月給計</span>
+                    <span>{laborCostResult.breakdown.monthly.toLocaleString()}円</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  従事者稼働記録がないか、従業員マスタに登録されていません
+                </p>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setLaborCostDialogOpen(false)}
+            >
+              キャンセル
+            </Button>
+            <Button onClick={handleApplyLaborCost}>
+              反映する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

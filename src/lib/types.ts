@@ -99,6 +99,22 @@ export type WorkRecord = {
   updated_at: string
 }
 
+// SalaryType (給与タイプ)
+export type SalaryType = 'hourly' | 'daily' | 'monthly'
+
+// Employee (従業員マスタ)
+export type Employee = {
+  employee_code: string
+  name: string
+  salary_type: SalaryType
+  hourly_rate: number | null
+  daily_rate: number | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
 // Expense (経費)
 export type Expense = {
   id: string
@@ -205,5 +221,7 @@ export type Page =
   | 'project-detail'
   | 'work-day-form'
   | 'expense-form'
+  | 'employee-list'
+  | 'employee-form'
   | 'analysis'
   | 'history'

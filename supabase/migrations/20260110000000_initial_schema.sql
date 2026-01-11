@@ -780,6 +780,44 @@ CREATE POLICY "Users can view expenses history" ON expenses_history FOR SELECT U
 CREATE POLICY "System can archive expenses history" ON expenses_history FOR INSERT WITH CHECK (true);
 
 -- ============================================================================
+-- 従業員マスタ
+-- ============================================================================
+
+-- employees（従業員マスタ）
+CREATE TABLE employees (
+  employee_code VARCHAR(10) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  salary_type VARCHAR(10) NOT NULL CHECK (salary_type IN ('hourly', 'daily', 'monthly')),
+  hourly_rate INTEGER,
+  daily_rate INTEGER,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID REFERENCES auth.users(id)
+);
+
+COMMENT ON TABLE employees IS '従業員マスタ: 従業員情報と給与タイプ・単価を管理';
+COMMENT ON COLUMN employees.employee_code IS '従業員コード（主キー）';
+COMMENT ON COLUMN employees.name IS '従業員氏名';
+COMMENT ON COLUMN employees.salary_type IS '給与タイプ: hourly=時給, daily=日給月給, monthly=月給';
+COMMENT ON COLUMN employees.hourly_rate IS '時給（円）- salary_type=hourly の場合に使用';
+COMMENT ON COLUMN employees.daily_rate IS '日給（円）- salary_type=daily/monthly の場合に使用';
+COMMENT ON COLUMN employees.is_active IS '有効フラグ（論理削除用）';
+
+-- インデックス
+CREATE INDEX idx_employees_active ON employees(is_active);
+CREATE INDEX idx_employees_salary_type ON employees(salary_type);
+
+-- RLS
+ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated users can manage employees" ON employees FOR ALL USING (auth.role() = 'authenticated');
+
+-- updated_at自動更新トリガー
+CREATE TRIGGER update_employees_updated_at
+BEFORE UPDATE ON employees
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
 -- リアルタイム機能の有効化
 -- ============================================================================
 
@@ -789,6 +827,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE projects;
 ALTER PUBLICATION supabase_realtime ADD TABLE work_days;
 ALTER PUBLICATION supabase_realtime ADD TABLE work_records;
 ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
+ALTER PUBLICATION supabase_realtime ADD TABLE employees;
 
 -- 履歴テーブルもリアルタイム対象に（監査用）
 ALTER PUBLICATION supabase_realtime ADD TABLE fields_history;

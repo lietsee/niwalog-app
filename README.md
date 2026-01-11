@@ -107,49 +107,30 @@ VITE_SUPABASE_ANON_KEY=<Supabase起動時に表示されたanon key>
 
 #### 5. テストユーザー作成
 
+**重要:** auth.usersテーブルへの直接SQLインサートは使用しないでください。Supabase auth APIを使用する必要があります。
+
+Supabase起動後に表示されるservice_role keyを使用して、以下のコマンドでテストユーザーを作成:
+
 ```bash
-psql postgresql://postgres:postgres@127.0.0.1:54622/postgres
+# service_role keyを取得
+SERVICE_ROLE_KEY=$(npx supabase status --output json | jq -r '.SERVICE_ROLE_KEY')
+
+# テストユーザーを作成（email_confirm: trueで即座にログイン可能）
+curl -X POST 'http://127.0.0.1:54621/auth/v1/admin/users' \
+  -H "apikey: $SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "testtest",
+    "email_confirm": true
+  }'
 ```
 
-psql接続後、以下のSQLを実行:
-
-```sql
-INSERT INTO auth.users (
-  instance_id,
-  id,
-  aud,
-  role,
-  email,
-  encrypted_password,
-  email_confirmed_at,
-  created_at,
-  updated_at,
-  raw_app_meta_data,
-  raw_user_meta_data,
-  is_super_admin,
-  confirmation_token,
-  email_change,
-  email_change_token_new,
-  recovery_token
-) VALUES (
-  '00000000-0000-0000-0000-000000000000',
-  gen_random_uuid(),
-  'authenticated',
-  'authenticated',
-  'test@example.com',
-  crypt('password123', gen_salt('bf')),
-  NOW(),
-  NOW(),
-  NOW(),
-  '{"provider":"email","providers":["email"]}',
-  '{}',
-  FALSE,
-  '',
-  '',
-  '',
-  ''
-);
-```
+**なぜSQLではダメなのか:**
+- auth.usersテーブルには`confirmation_token`等のカラムがあり、auth serviceはこれらがNULLでないことを期待する
+- 直接SQLでインサートするとこれらの値が不正な状態になり、ログイン時に500エラーが発生する
+- Supabase auth admin APIは必要なカラムを全て正しく設定してくれる
 
 #### 6. サンプルデータ投入（オプション）
 
@@ -180,7 +161,7 @@ npm run dev
 #### 8. ログイン
 
 - **メールアドレス**: test@example.com
-- **パスワード**: password123
+- **パスワード**: testtest
 
 ### 利用可能なスクリプト
 
@@ -208,6 +189,8 @@ niwalog-app/
 │   │   ├── workRecordsApi.ts     # 従事者稼働API（CRUD + 一括作成）
 │   │   ├── expensesApi.ts        # 経費API（CRUD + 合計計算）
 │   │   ├── dashboardApi.ts       # ダッシュボードAPI（集計・統計）
+│   │   ├── employeesApi.ts       # 従業員API（CRUD）
+│   │   ├── laborCostApi.ts       # 人件費計算API
 │   │   ├── errorMessages.ts      # エラーメッセージ翻訳
 │   │   └── utils.ts              # ユーティリティ関数
 │   ├── pages/                    # ページコンポーネント
@@ -219,7 +202,9 @@ niwalog-app/
 │   │   ├── ProjectFormPage.tsx   # 案件作成・編集フォーム
 │   │   ├── ProjectDetailPage.tsx # 案件詳細（作業日・経費タブ）
 │   │   ├── WorkDayFormPage.tsx   # 作業日作成・編集フォーム
-│   │   └── ExpenseFormPage.tsx   # 経費作成・編集フォーム
+│   │   ├── ExpenseFormPage.tsx   # 経費作成・編集フォーム
+│   │   ├── EmployeeListPage.tsx  # 従業員一覧・検索
+│   │   └── EmployeeFormPage.tsx  # 従業員作成・編集フォーム
 │   ├── components/               # UIコンポーネント
 │   │   ├── ui/                   # Radix UI ベースコンポーネント
 │   │   │   ├── button.tsx
@@ -231,7 +216,8 @@ niwalog-app/
 │   │   │   ├── checkbox.tsx
 │   │   │   ├── badge.tsx
 │   │   │   ├── tabs.tsx          # タブUI
-│   │   │   └── alert-dialog.tsx  # 確認ダイアログ
+│   │   │   ├── alert-dialog.tsx  # 確認ダイアログ
+│   │   │   └── radio-group.tsx   # ラジオボタングループ
 │   │   ├── FieldCard.tsx         # 現場カード表示
 │   │   ├── ProjectCard.tsx       # 案件カード表示
 │   │   ├── WorkDayCard.tsx       # 作業日カード表示
@@ -241,12 +227,14 @@ niwalog-app/
 │   │   ├── StatCard.tsx          # サマリーカード
 │   │   ├── MonthlyChart.tsx      # 月別グラフ（Recharts）
 │   │   ├── RecentProjectList.tsx # 直近案件リスト
-│   │   └── EmployeeHoursTable.tsx # 従業員稼働テーブル
+│   │   ├── EmployeeHoursTable.tsx # 従業員稼働テーブル
+│   │   └── EmployeeCard.tsx      # 従業員カード表示
 │   ├── schemas/                  # Zodバリデーションスキーマ
 │   │   ├── fieldSchema.ts
 │   │   ├── projectSchema.ts
 │   │   ├── workDaySchema.ts      # 作業日バリデーション
-│   │   └── expenseSchema.ts      # 経費バリデーション
+│   │   ├── expenseSchema.ts      # 経費バリデーション
+│   │   └── employeeSchema.ts     # 従業員バリデーション
 │   ├── App.tsx                   # ルーティング・認証チェック
 │   └── main.tsx                  # エントリーポイント
 ├── supabase/
@@ -416,6 +404,34 @@ niwalog-app/
 **インデックス:**
 - `idx_expenses_project` on `project_id`
 - `idx_expenses_date` on `expense_date DESC`
+
+**RLSポリシー:**
+- ALL: 認証済みユーザー全員が全操作可能
+
+#### employees（従業員マスタ）
+
+従業員の基本情報と給与タイプを管理。人件費計算に使用。
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|---|------|------|
+| employee_code | VARCHAR(10) | PRIMARY KEY | 従業員コード（例: f001） |
+| name | VARCHAR(100) | NOT NULL | 氏名 |
+| salary_type | VARCHAR(10) | NOT NULL | 給与タイプ: hourly/daily/monthly |
+| hourly_rate | INTEGER | NULL | 時給（円）- salary_type=hourly の場合 |
+| daily_rate | INTEGER | NULL | 日給（円）- salary_type=daily/monthly の場合 |
+| is_active | BOOLEAN | DEFAULT TRUE | 有効フラグ |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時（自動） |
+| created_by | UUID | FK → auth.users(id) | 作成者 |
+
+**給与タイプ:**
+- `hourly`: 時給（人件費 = 時給 × 稼働時間）
+- `daily`: 日給月給（人件費 = 日給 × 按分率）
+- `monthly`: 月給（人件費 = 日給 × 按分率）
+
+**インデックス:**
+- `idx_employees_active` on `is_active`
+- `idx_employees_salary_type` on `salary_type`
 
 **RLSポリシー:**
 - ALL: 認証済みユーザー全員が全操作可能
@@ -920,6 +936,55 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 
 ---
 
+### Phase 7: 従業員マスタ・人件費自動計算（完了 ✅）
+
+**実装内容:**
+- 従業員マスタ管理（CRUD）
+- 給与タイプ別の人件費計算（時給/日給月給/月給）
+- 案件編集画面での「人件費を自動計算」ボタン
+- 同日複数案件従事時の按分計算
+
+**主要ファイル:**
+- `src/pages/EmployeeListPage.tsx`: 従業員一覧・検索・無効フラグ切替
+- `src/pages/EmployeeFormPage.tsx`: 従業員作成・編集フォーム
+- `src/components/EmployeeCard.tsx`: 従業員カード表示
+- `src/lib/employeesApi.ts`: 従業員API（CRUD）
+- `src/lib/laborCostApi.ts`: 人件費計算API
+- `src/schemas/employeeSchema.ts`: Zodバリデーション
+
+**機能詳細:**
+
+#### 従業員一覧（EmployeeListPage）
+- 全従業員を従業員コード順に表示
+- 検索機能（従業員コード・氏名）
+- 「無効な従業員も表示」トグル
+- 給与タイプ別バッジ表示（時給/日給月給/月給）
+
+#### 従業員フォーム（EmployeeFormPage）
+- 従業員コード（編集時は変更不可）
+- 氏名
+- 給与タイプ（RadioGroup: 時給/日給月給/月給）
+- 時給（時給タイプの場合のみ表示）
+- 日給（日給月給/月給タイプの場合のみ表示）
+- 有効/無効フラグ
+
+#### 人件費計算ロジック（laborCostApi.ts）
+- **時給の場合**: `時給 × (total_hours || site_hours)`
+- **日給月給/月給の場合**: `日給 × (その案件での稼働時間 / その日の全案件の稼働時間合計)`
+
+**按分計算の例:**
+従業員Aさん（日給: 15,000円）が1/15に2つの案件に従事:
+- 案件X: 4時間拘束
+- 案件Y: 4時間拘束
+- 結果: 案件X = 7,500円、案件Y = 7,500円
+
+#### 案件編集画面の「人件費を自動計算」ボタン
+- クリック時に`calculateLaborCost()`を呼び出し
+- 計算結果をダイアログで表示（内訳・合計）
+- 「反映する」ボタンで`labor_cost`フィールドに値をセット
+
+---
+
 ## 未実装機能
 
 ### カスケード削除機能（将来実装予定）
@@ -981,12 +1046,43 @@ npx supabase start
 
 ### データベースリセット後にテストユーザーがいない
 
+Supabase auth admin APIでテストユーザーを再作成してください:
+
 ```bash
-# psqlで接続してテストユーザーを再作成
-psql postgresql://postgres:postgres@127.0.0.1:54622/postgres
+# service_role keyを取得
+SERVICE_ROLE_KEY=$(npx supabase status --output json | jq -r '.SERVICE_ROLE_KEY')
+
+# テストユーザーを作成
+curl -X POST 'http://127.0.0.1:54621/auth/v1/admin/users' \
+  -H "apikey: $SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "testtest",
+    "email_confirm": true
+  }'
 ```
 
-上記の「テストユーザー作成」のSQLを再実行してください。
+**注意:** auth.usersテーブルへの直接SQLインサートは使用しないでください（500エラーの原因になります）。
+
+### ログイン時に500エラー
+
+**原因:** auth.usersテーブルに直接SQLでユーザーを作成した場合に発生します。
+
+auth serviceのログを確認:
+```bash
+docker logs supabase_auth_niwalog-app 2>&1 | tail -20
+```
+
+以下のようなエラーが出ている場合:
+```
+"error":"error finding user: sql: Scan error on column index 3, name \"confirmation_token\": converting NULL to string is unsupported"
+```
+
+**解決方法:**
+1. DBをリセット: `npx supabase db reset`
+2. Supabase auth admin APIでユーザーを再作成（上記「テストユーザー作成」参照）
 
 ### ログイン時に403エラー
 

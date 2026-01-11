@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { MapPin, Briefcase, TrendingUp, Receipt, Users, BarChart3, History, ChevronLeft, ChevronRight } from 'lucide-react'
+import { MapPin, Briefcase, TrendingUp, Receipt, Users, BarChart3, History, ChevronLeft, ChevronRight, UserCog } from 'lucide-react'
 import { format, subMonths, addMonths } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,7 @@ import type { DashboardSummary, MonthlyStats, RecentProject, EmployeeWorkSummary
 type PeriodMode = 'single' | 'range'
 
 interface DashboardPageProps {
-  onNavigate: (page: 'field-list' | 'analysis' | 'history') => void
+  onNavigate: (page: 'field-list' | 'analysis' | 'history' | 'employee-list') => void
 }
 
 function formatCurrency(value: number): string {
@@ -159,6 +159,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             <Button variant="outline" onClick={() => onNavigate('history')}>
               <History className="h-4 w-4 mr-2" />
               履歴
+            </Button>
+            <Button variant="outline" onClick={() => onNavigate('employee-list')}>
+              <UserCog className="h-4 w-4 mr-2" />
+              従業員
             </Button>
             <Button onClick={() => onNavigate('field-list')}>
               <MapPin className="h-4 w-4 mr-2" />
