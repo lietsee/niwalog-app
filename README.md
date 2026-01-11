@@ -34,7 +34,7 @@ NiwaLogは、造園・庭園管理業務における現場ごとの詳細情報�
 - **案件管理**: 実施日ごとの作業記録、自動採番
 - **日別作業記録**: 複数日作業の管理と従事者稼働記録
 - **経費管理**: 案件ごとの経費記録と合計計算
-- **ダッシュボード**: 収益性分析、稼働分析（未実装）
+- **ダッシュボード**: サマリー表示、月別グラフ、従業員稼働分析
 
 ---
 
@@ -52,6 +52,7 @@ NiwaLogは、造園・庭園管理業務における現場ごとの詳細情報�
 | データベース | Supabase JS | 2.90.1 | PostgreSQL + Auth |
 | 通知 | Sonner | 2.0.7 | トースト通知 |
 | アイコン | Lucide React | 0.562.0 | UIアイコン |
+| グラフ | Recharts | 3.6.0 | データ可視化 |
 
 ---
 
@@ -206,11 +207,12 @@ niwalog-app/
 │   │   ├── workDaysApi.ts        # 作業日API（全CRUD + 自動採番）
 │   │   ├── workRecordsApi.ts     # 従事者稼働API（CRUD + 一括作成）
 │   │   ├── expensesApi.ts        # 経費API（CRUD + 合計計算）
+│   │   ├── dashboardApi.ts       # ダッシュボードAPI（集計・統計）
 │   │   ├── errorMessages.ts      # エラーメッセージ翻訳
 │   │   └── utils.ts              # ユーティリティ関数
 │   ├── pages/                    # ページコンポーネント
 │   │   ├── LoginPage.tsx         # ログイン画面
-│   │   ├── DashboardPage.tsx     # ダッシュボード（未実装）
+│   │   ├── DashboardPage.tsx     # ダッシュボード（トップページ）
 │   │   ├── FieldListPage.tsx     # 現場一覧・検索・削除
 │   │   ├── FieldFormPage.tsx     # 現場作成・編集フォーム
 │   │   ├── ProjectListPage.tsx   # 案件一覧・削除
@@ -235,7 +237,11 @@ niwalog-app/
 │   │   ├── WorkDayCard.tsx       # 作業日カード表示
 │   │   ├── ExpenseCard.tsx       # 経費カード表示
 │   │   ├── WeatherInput.tsx      # 天候入力（動的配列）
-│   │   └── WorkRecordInput.tsx   # 従事者入力（動的配列）
+│   │   ├── WorkRecordInput.tsx   # 従事者入力（動的配列）
+│   │   ├── StatCard.tsx          # サマリーカード
+│   │   ├── MonthlyChart.tsx      # 月別グラフ（Recharts）
+│   │   ├── RecentProjectList.tsx # 直近案件リスト
+│   │   └── EmployeeHoursTable.tsx # 従業員稼働テーブル
 │   ├── schemas/                  # Zodバリデーションスキーマ
 │   │   ├── fieldSchema.ts
 │   │   ├── projectSchema.ts
@@ -762,31 +768,60 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 - 使用日: 任意
 - 備考: 任意
 
+### Phase 5: ダッシュボード・分析機能（完了 ✅）
+
+**実装内容:**
+- サマリーカード（現場数、案件数、今月売上/経費/人件費）
+- 月別売上・経費推移グラフ（Recharts棒グラフ）
+- 直近案件リスト表示
+- 従業員稼働時間サマリーテーブル
+- ログイン後はダッシュボードがトップページ
+
+**主要ファイル:**
+- `src/pages/DashboardPage.tsx`: ダッシュボードメインページ
+- `src/lib/dashboardApi.ts`: ダッシュボードAPI
+- `src/components/StatCard.tsx`: サマリーカードコンポーネント
+- `src/components/MonthlyChart.tsx`: 月別グラフ（Recharts）
+- `src/components/RecentProjectList.tsx`: 直近案件リスト
+- `src/components/EmployeeHoursTable.tsx`: 従業員稼働テーブル
+
+**機能詳細:**
+
+#### 画面構成
+```
+┌──────────────────────────────────────────────────────────┐
+│ ダッシュボード                          [現場一覧] [ログアウト] │
+├──────────────────────────────────────────────────────────┤
+│ [現場数] [案件数] [今月売上] [今月経費] [今月人件費]           │
+├──────────────────────────────────────────────────────────┤
+│ [月別売上・経費推移グラフ]      │ [直近の案件リスト]         │
+├──────────────────────────────────────────────────────────┤
+│ [今月の従業員稼働テーブル]                                  │
+└──────────────────────────────────────────────────────────┘
+```
+
+#### API層（dashboardApi.ts）
+- `getDashboardSummary()`: サマリー情報取得（現場数、案件数、今月の売上/経費/人件費）
+- `getMonthlyStats(months)`: 月別集計取得（過去N ヶ月分）
+- `getRecentProjects(limit)`: 直近案件取得
+- `getEmployeeWorkSummary()`: 今月の従業員稼働サマリー取得
+
 ---
 
 ## 未実装機能
 
-### Phase 5: ダッシュボード・分析機能（未実装）
+### Phase 6: 高度な分析・エクスポート機能（未実装）
 
-**概要:** 収益性分析、従業員稼働分析、案件の時系列変化を可視化。
+**概要:** より高度な分析機能とデータエクスポート。
 
 **実装予定:**
-
-#### ダッシュボード（DashboardPage）
-- 直近30日の案件数
-- 今月の売上（請求金額合計）
-- 今月の人件費・経費
-- 粗利益率
-- 現場数・案件数の推移グラフ
 
 #### 分析機能
 - 現場別収益性レポート
   - 売上・人件費・経費・粗利益
   - 移動費率
   - 案件数推移
-- 従業員稼働分析
-  - 従業員別稼働時間
-  - 期間指定集計
+- 期間指定分析（日付範囲選択）
 - 案件レビュー一覧
   - 良かった点・改善点の蓄積
   - 次回申し送り事項の確認
@@ -796,10 +831,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 - 案件履歴表示
 - 変更履歴追跡（誰がいつ変更したか）
 
-**技術要素:**
-- グラフライブラリ（Recharts or Chart.js）
-- 日付範囲選択（react-day-picker）
+#### エクスポート機能
 - CSV/Excelエクスポート
+- レポート印刷機能
 
 ---
 
@@ -859,13 +893,13 @@ SELECT id, field_code, created_by FROM fields;
 **ブランチ:** main
 
 **コミット履歴（最新）:**
-1. `492123e` - feat: Phase 4 日別作業記録・従事者稼働・経費管理機能を実装
-2. `d7f6a42` - feat: Phase 3 案件管理機能を実装
-3. `20e89ea` - docs: 包括的なドキュメント作成（開発中断・再開用）
-4. `b22964e` - fix: RLSポリシーを変更し全認証ユーザーが編集可能に
-5. `b3bd71c` - fix: Downgrade Tailwind CSS to v3.4.17 and configure CSS variables
-6. `b8e853e` - feat: 検索機能を拡張（住所・顧客名対応）
-7. `766ac36` - fix: フォームバリデーションとエラーメッセージ改善
+1. `7ebd294` - feat: Phase 5 ダッシュボード・分析機能を実装
+2. `0c654a2` - docs: Phase 4完了に伴うREADME更新
+3. `492123e` - feat: Phase 4 日別作業記録・従事者稼働・経費管理機能を実装
+4. `d7f6a42` - feat: Phase 3 案件管理機能を実装
+5. `20e89ea` - docs: 包括的なドキュメント作成（開発中断・再開用）
+6. `b22964e` - fix: RLSポリシーを変更し全認証ユーザーが編集可能に
+7. `b3bd71c` - fix: Downgrade Tailwind CSS to v3.4.17 and configure CSS variables
 8. `d74e368` - feat: Phase 2 現場マスタ管理（Fields CRUD）完成
 9. `67ba474` - feat: Phase 1 authentication and basic UI components
 
