@@ -364,19 +364,30 @@ niwalog-app/
 
 #### work_records（従事者稼働記録）
 
-日別作業に従事した作業者の稼働時間記録。
+日別作業に従事した作業者の稼働時間記録。4時刻方式で途中合流・途中離脱にも対応。
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|---|------|------|
 | id | UUID | PRIMARY KEY | 記録ID（自動生成） |
 | work_day_id | UUID | FK → work_days(id) ON DELETE RESTRICT | 作業日ID |
-| employee_code | VARCHAR(50) | NOT NULL | 従業員コード |
-| start_time | TIME | NOT NULL | 開始時刻 |
-| end_time | TIME | NOT NULL | 終了時刻 |
+| employee_code | VARCHAR(10) | NOT NULL | 従業員コード |
+| clock_in | TIME | NULL | 出勤時間（土場）- 途中合流の場合はNULL |
+| site_arrival | TIME | NOT NULL | 現場到着時間 |
+| site_departure | TIME | NOT NULL | 現場撤収時間 |
+| clock_out | TIME | NULL | 退勤時間（土場）- 途中離脱の場合はNULL |
 | break_minutes | INTEGER | DEFAULT 60 | 休憩時間（分） |
-| working_hours | NUMERIC(5, 2) | NULL | 稼働時間（自動計算: end_time - start_time - break_minutes） |
+| site_hours | DECIMAL(5,2) | NULL | 現場作業時間（自動計算: site_departure - site_arrival - break_minutes） |
+| prep_hours | DECIMAL(5,2) | NULL | 準備・移動時間（自動計算: site_arrival - clock_in、clock_inがNULLの場合はNULL） |
+| return_hours | DECIMAL(5,2) | NULL | 帰社時間（自動計算: clock_out - site_departure、clock_outがNULLの場合はNULL） |
+| total_hours | DECIMAL(5,2) | NULL | 総拘束時間（自動計算: clock_out - clock_in、両方がある場合のみ） |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時（自動） |
+
+**4時刻パターン:**
+- 通常勤務: clock_in → site_arrival → site_departure → clock_out（4つすべて入力）
+- 途中合流: site_arrival → site_departure → clock_out（clock_in = NULL）
+- 途中離脱: clock_in → site_arrival → site_departure（clock_out = NULL）
+- 途中合流・途中離脱: site_arrival → site_departure のみ（clock_in/clock_out = NULL）
 
 **複合ユニーク制約:** `(work_day_id, employee_code)`
 
@@ -453,15 +464,37 @@ CREATE TRIGGER update_fields_updated_at BEFORE UPDATE ON fields FOR EACH ROW EXE
 
 #### 2. calculate_working_hours()
 
-`work_records`の`working_hours`を自動計算（end_time - start_time - break_minutes）。
+`work_records`の各時間カラムを自動計算（4時刻方式対応）。
 
 ```sql
 CREATE OR REPLACE FUNCTION calculate_working_hours()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- 稼働時間 = (終了時刻 - 開始時刻) - 休憩時間
-  NEW.working_hours := (EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) / 3600)
-                       - (COALESCE(NEW.break_minutes, 60) / 60.0);
+  -- 現場作業時間 = 撤収 - 到着 - 休憩
+  NEW.site_hours := (EXTRACT(EPOCH FROM (NEW.site_departure - NEW.site_arrival)) / 3600)
+                    - (COALESCE(NEW.break_minutes, 60) / 60.0);
+
+  -- 準備＋移動時間（clock_inがある場合のみ）
+  IF NEW.clock_in IS NOT NULL AND NEW.site_arrival IS NOT NULL THEN
+    NEW.prep_hours := EXTRACT(EPOCH FROM (NEW.site_arrival - NEW.clock_in)) / 3600;
+  ELSE
+    NEW.prep_hours := NULL;
+  END IF;
+
+  -- 帰社時間（clock_outがある場合のみ）
+  IF NEW.site_departure IS NOT NULL AND NEW.clock_out IS NOT NULL THEN
+    NEW.return_hours := EXTRACT(EPOCH FROM (NEW.clock_out - NEW.site_departure)) / 3600;
+  ELSE
+    NEW.return_hours := NULL;
+  END IF;
+
+  -- 総拘束時間（両方ある場合のみ）
+  IF NEW.clock_in IS NOT NULL AND NEW.clock_out IS NOT NULL THEN
+    NEW.total_hours := EXTRACT(EPOCH FROM (NEW.clock_out - NEW.clock_in)) / 3600;
+  ELSE
+    NEW.total_hours := NULL;
+  END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -718,10 +751,35 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
   - 基本情報（作業日、日番号）
   - 天候情報（動的配列: 時刻 + 天候）
   - 作業内容（作業内容詳細、トラブル・特記事項）
-  - 従事者稼働（動的配列: 従業員コード + 開始時刻 + 終了時刻）
+  - 従事者稼働（4時刻対応の動的配列）
 - 日番号は自動採番（案件ごとに連番）、編集可能
 - 天候エントリの動的追加・削除
-- 従事者エントリの動的追加・削除
+- 従事者エントリの動的追加・削除・複製
+
+#### 従事者稼働入力（WorkRecordInput）
+4時刻方式に対応した入力UIを提供。
+
+**入力フィールド（デスクトップ表示）:**
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 従業員   │ 出勤   │ 現着   │ 撤収   │ 退勤   │ 休憩 │ 現場時間 │ [複製][×] │
+│ [f001  ] │ [08:00]│ [08:30]│ [16:00]│ [17:00]│ [60] │   6.5h  │           │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+**特徴:**
+- 出勤/退勤時刻は任意入力（クリアボタンで削除可能）
+- 現着/撤収時刻は必須入力
+- 時計アイコンで統一されたUI（lucide-react Clockアイコン）
+- 行の複製機能（従業員コードは空でコピー）
+- 現場作業時間をリアルタイム計算表示
+
+**デフォルト値:**
+- 出勤: 08:00
+- 現着: 08:30
+- 撤収: 16:00
+- 退勤: 17:00
+- 休憩: 60分
 
 #### 経費フォーム（ExpenseFormPage）
 - フィールド:
@@ -764,7 +822,13 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 - 天候: 配列（各エントリ: 時刻 + 天候）
 - 作業内容詳細: テキスト（任意）
 - トラブル: テキスト（任意）
-- 従事者: 配列（各エントリ: 従業員コード + 開始時刻 + 終了時刻）
+- 従事者: 配列（各エントリ: 従業員コード + 4時刻 + 休憩時間）
+  - 従業員コード: 必須、10文字以内
+  - 出勤時刻（clock_in）: 任意（途中合流の場合は空）
+  - 現着時刻（site_arrival）: 必須
+  - 撤収時刻（site_departure）: 必須
+  - 退勤時刻（clock_out）: 任意（途中離脱の場合は空）
+  - 休憩時間: 0以上の整数（デフォルト60分）
 
 **expenseSchema.ts:**
 - 項目名: 必須、255文字以内
@@ -796,19 +860,26 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 ┌──────────────────────────────────────────────────────────┐
 │ ダッシュボード                          [現場一覧] [ログアウト] │
 ├──────────────────────────────────────────────────────────┤
-│ [現場数] [案件数] [今月売上] [今月経費] [今月人件費]           │
+│ [期間選択: 単月/期間指定]                                   │
+├──────────────────────────────────────────────────────────┤
+│ [現場数] [案件数] [売上] [経費] [人件費]                     │
 ├──────────────────────────────────────────────────────────┤
 │ [月別売上・経費推移グラフ]      │ [直近の案件リスト]         │
 ├──────────────────────────────────────────────────────────┤
-│ [今月の従業員稼働テーブル]                                  │
+│ [従業員稼働テーブル]                                       │
 └──────────────────────────────────────────────────────────┘
 ```
 
+#### 期間選択機能
+- **単月モード**: 特定の月を選択（デフォルト: 今月）
+- **期間指定モード**: 開始日〜終了日を指定して集計
+- 選択した期間に応じてサマリーカード・従業員稼働テーブルが更新
+
 #### API層（dashboardApi.ts）
-- `getDashboardSummary()`: サマリー情報取得（現場数、案件数、今月の売上/経費/人件費）
+- `getDashboardSummary(startDate?, endDate?)`: サマリー情報取得（現場数、案件数、期間内の売上/経費/人件費）
 - `getMonthlyStats(months)`: 月別集計取得（過去N ヶ月分）
 - `getRecentProjects(limit)`: 直近案件取得
-- `getEmployeeWorkSummary()`: 今月の従業員稼働サマリー取得
+- `getEmployeeWorkSummary(startDate?, endDate?)`: 期間内の従業員稼働サマリー取得
 
 ---
 
@@ -951,15 +1022,16 @@ SELECT id, field_code, created_by FROM fields;
 **ブランチ:** main
 
 **コミット履歴（最新）:**
-1. `7ebd294` - feat: Phase 5 ダッシュボード・分析機能を実装
-2. `0c654a2` - docs: Phase 4完了に伴うREADME更新
-3. `492123e` - feat: Phase 4 日別作業記録・従事者稼働・経費管理機能を実装
-4. `d7f6a42` - feat: Phase 3 案件管理機能を実装
-5. `20e89ea` - docs: 包括的なドキュメント作成（開発中断・再開用）
-6. `b22964e` - fix: RLSポリシーを変更し全認証ユーザーが編集可能に
-7. `b3bd71c` - fix: Downgrade Tailwind CSS to v3.4.17 and configure CSS variables
-8. `d74e368` - feat: Phase 2 現場マスタ管理（Fields CRUD）完成
-9. `67ba474` - feat: Phase 1 authentication and basic UI components
+1. `14674aa` - fix: 従事者稼働記録の出勤時間デフォルトを08:00に変更
+2. `7d929ea` - feat: 従事者稼働記録を4時刻カラムに拡張
+3. `a5ace10` - feat: ダッシュボードに期間指定機能を追加
+4. `43afaa5` - feat: 作業日一覧に複製ボタンを追加
+5. `77842fe` - feat: 従事者稼働に休憩時間フィールドと複製ボタンを追加
+6. `5295fa3` - fix: 現場削除時の外部キー制約エラーメッセージを改善
+7. `d541ec3` - fix: 現場フォームの移動費フィールドでNaNエラーが発生する問題を修正
+8. `b07b52f` - feat: Phase 6 高度な分析・エクスポート機能を実装
+9. `13f181b` - docs: Phase 5完了に伴うREADME更新
+10. `7ebd294` - feat: Phase 5 ダッシュボード・分析機能を実装
 
 ---
 
