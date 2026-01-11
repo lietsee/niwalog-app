@@ -43,7 +43,6 @@ export function EmployeeFormPage({ onNavigate, employeeCode }: EmployeeFormPageP
       salary_type: 'hourly',
       hourly_rate: null,
       daily_rate: null,
-      is_active: true,
     },
   })
 
@@ -72,7 +71,6 @@ export function EmployeeFormPage({ onNavigate, employeeCode }: EmployeeFormPageP
       setValue('salary_type', data.salary_type)
       setValue('hourly_rate', data.hourly_rate)
       setValue('daily_rate', data.daily_rate)
-      setValue('is_active', data.is_active)
     }
 
     setLoading(false)
@@ -88,7 +86,6 @@ export function EmployeeFormPage({ onNavigate, employeeCode }: EmployeeFormPageP
       salary_type: data.salary_type as SalaryType,
       hourly_rate: data.salary_type === 'hourly' ? (data.hourly_rate ?? null) : null,
       daily_rate: data.salary_type !== 'hourly' ? (data.daily_rate ?? null) : null,
-      is_active: data.is_active,
     }
 
     if (isEditMode && employeeCode) {

@@ -60,6 +60,18 @@ export async function getDashboardSummary(
       return { data: null, error: expensesError.message, status: 400 }
     }
 
+    // 期間内の月次経費（固定費・変動費）取得
+    const yearMonth = format(startDate || now, 'yyyy-MM')
+    const { data: monthlyCosts, error: monthlyCostsError } = await supabase
+      .from('monthly_costs')
+      .select('cost_type, amount')
+      .eq('year_month', yearMonth)
+
+    if (monthlyCostsError) {
+      console.error('Monthly costs error:', monthlyCostsError)
+      return { data: null, error: monthlyCostsError.message, status: 400 }
+    }
+
     // 集計
     const monthlyInvoice = (monthlyProjects || []).reduce(
       (sum, p) => sum + (p.invoice_amount || 0),
@@ -74,6 +86,20 @@ export async function getDashboardSummary(
       0
     )
 
+    // 固定費・変動費集計
+    let monthlyFixedCost = 0
+    let monthlyVariableCost = 0
+    for (const cost of monthlyCosts || []) {
+      if (cost.cost_type === 'fixed') {
+        monthlyFixedCost += cost.amount
+      } else {
+        monthlyVariableCost += cost.amount
+      }
+    }
+
+    // 粗利計算: 売上 - 経費 - 人件費 - 固定費 - 変動費
+    const grossProfit = monthlyInvoice - monthlyExpense - monthlyLaborCost - monthlyFixedCost - monthlyVariableCost
+
     return {
       data: {
         totalFields: totalFields || 0,
@@ -81,6 +107,9 @@ export async function getDashboardSummary(
         monthlyInvoice,
         monthlyExpense,
         monthlyLaborCost,
+        monthlyFixedCost,
+        monthlyVariableCost,
+        grossProfit,
       },
       error: null,
       status: 200,
@@ -134,15 +163,38 @@ export async function getMonthlyStats(
         .gte('expense_date', monthStart)
         .lte('expense_date', monthEnd)
 
+      // 月次経費（固定費・変動費）取得
+      const { data: monthlyCosts } = await supabase
+        .from('monthly_costs')
+        .select('cost_type, amount')
+        .eq('year_month', monthKey)
+
       const invoice = (projects || []).reduce((sum, p) => sum + (p.invoice_amount || 0), 0)
       const laborCost = (projects || []).reduce((sum, p) => sum + (p.labor_cost || 0), 0)
       const expense = (expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0)
+
+      // 固定費・変動費集計
+      let fixedCost = 0
+      let variableCost = 0
+      for (const cost of monthlyCosts || []) {
+        if (cost.cost_type === 'fixed') {
+          fixedCost += cost.amount
+        } else {
+          variableCost += cost.amount
+        }
+      }
+
+      // 粗利計算
+      const grossProfit = invoice - expense - laborCost - fixedCost - variableCost
 
       stats.push({
         month: monthKey,
         invoice,
         expense,
         laborCost,
+        fixedCost,
+        variableCost,
+        grossProfit,
       })
 
       // 次の月へ

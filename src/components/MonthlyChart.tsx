@@ -57,6 +57,8 @@ export function MonthlyChart({ data }: MonthlyChartProps) {
               <Bar dataKey="invoice" name="売上" fill="#22c55e" />
               <Bar dataKey="expense" name="経費" fill="#ef4444" />
               <Bar dataKey="laborCost" name="人件費" fill="#3b82f6" />
+              <Bar dataKey="fixedCost" name="固定費" fill="#8b5cf6" />
+              <Bar dataKey="variableCost" name="変動費" fill="#f97316" />
             </BarChart>
           </ResponsiveContainer>
         )}

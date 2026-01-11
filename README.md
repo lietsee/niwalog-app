@@ -34,7 +34,8 @@ NiwaLogは、造園・庭園管理業務における現場ごとの詳細情報�
 - **案件管理**: 実施日ごとの作業記録、自動採番
 - **日別作業記録**: 複数日作業の管理と従事者稼働記録
 - **経費管理**: 案件ごとの経費記録と合計計算
-- **ダッシュボード**: サマリー表示、月別グラフ、従業員稼働分析
+- **月次経費管理**: 固定費・変動費の月次管理
+- **ダッシュボード**: サマリー表示、月別グラフ、従業員稼働分析、粗利計算
 
 ---
 
@@ -211,6 +212,7 @@ niwalog-app/
 │   │   ├── dashboardApi.ts       # ダッシュボードAPI（集計・統計）
 │   │   ├── employeesApi.ts       # 従業員API（CRUD）
 │   │   ├── laborCostApi.ts       # 人件費計算API
+│   │   ├── monthlyCostsApi.ts    # 月次経費API（CRUD）
 │   │   ├── errorMessages.ts      # エラーメッセージ翻訳
 │   │   └── utils.ts              # ユーティリティ関数
 │   ├── pages/                    # ページコンポーネント
@@ -224,7 +226,8 @@ niwalog-app/
 │   │   ├── WorkDayFormPage.tsx   # 作業日作成・編集フォーム
 │   │   ├── ExpenseFormPage.tsx   # 経費作成・編集フォーム
 │   │   ├── EmployeeListPage.tsx  # 従業員一覧・検索
-│   │   └── EmployeeFormPage.tsx  # 従業員作成・編集フォーム
+│   │   ├── EmployeeFormPage.tsx  # 従業員作成・編集フォーム
+│   │   └── MonthlyCostPage.tsx   # 月次経費管理（固定費・変動費）
 │   ├── components/               # UIコンポーネント
 │   │   ├── ui/                   # Radix UI ベースコンポーネント
 │   │   │   ├── button.tsx
@@ -237,7 +240,8 @@ niwalog-app/
 │   │   │   ├── badge.tsx
 │   │   │   ├── tabs.tsx          # タブUI
 │   │   │   ├── alert-dialog.tsx  # 確認ダイアログ
-│   │   │   └── radio-group.tsx   # ラジオボタングループ
+│   │   │   ├── radio-group.tsx   # ラジオボタングループ
+│   │   │   └── select.tsx        # セレクトボックス
 │   │   ├── FieldCard.tsx         # 現場カード表示
 │   │   ├── ProjectCard.tsx       # 案件カード表示
 │   │   ├── WorkDayCard.tsx       # 作業日カード表示
@@ -254,7 +258,8 @@ niwalog-app/
 │   │   ├── projectSchema.ts
 │   │   ├── workDaySchema.ts      # 作業日バリデーション
 │   │   ├── expenseSchema.ts      # 経費バリデーション
-│   │   └── employeeSchema.ts     # 従業員バリデーション
+│   │   ├── employeeSchema.ts     # 従業員バリデーション
+│   │   └── monthlyCostSchema.ts  # 月次経費バリデーション
 │   ├── App.tsx                   # ルーティング・認証チェック
 │   └── main.tsx                  # エントリーポイント
 ├── supabase/
@@ -439,7 +444,6 @@ niwalog-app/
 | salary_type | VARCHAR(10) | NOT NULL | 給与タイプ: hourly/daily/monthly |
 | hourly_rate | INTEGER | NULL | 時給（円）- salary_type=hourly の場合 |
 | daily_rate | INTEGER | NULL | 日給（円）- salary_type=daily/monthly の場合 |
-| is_active | BOOLEAN | DEFAULT TRUE | 有効フラグ |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時（自動） |
 | created_by | UUID | FK → auth.users(id) | 作成者 |
@@ -450,11 +454,43 @@ niwalog-app/
 - `monthly`: 月給（人件費 = 日給 × 按分率）
 
 **インデックス:**
-- `idx_employees_active` on `is_active`
 - `idx_employees_salary_type` on `salary_type`
 
 **RLSポリシー:**
 - ALL: 認証済みユーザー全員が全操作可能
+
+**削除方式:**
+- 物理削除（履歴テーブル `employees_history` に自動退避）
+
+#### monthly_costs（月次経費）
+
+月ごとの固定費・変動費を管理。ダッシュボードの粗利計算に使用。
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|---|------|------|
+| id | UUID | PRIMARY KEY | 経費ID（自動生成） |
+| year_month | VARCHAR(7) | NOT NULL | 対象年月（例: 2026-01） |
+| cost_type | VARCHAR(20) | NOT NULL | 種別: fixed（固定費）/ variable（変動費） |
+| category | VARCHAR(100) | NOT NULL | カテゴリ（例: 地代家賃、通信費） |
+| amount | INTEGER | NOT NULL | 金額（円） |
+| notes | TEXT | NULL | 備考 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時（自動） |
+| created_by | UUID | FK → auth.users(id) | 作成者 |
+
+**定型カテゴリ:**
+- 固定費: 地代家賃、水道光熱費、通信費、保険料、リース料、その他
+- 変動費: カード決済手数料、消耗品費、車両燃料費、その他
+
+**インデックス:**
+- `idx_monthly_costs_year_month` on `year_month`
+- `idx_monthly_costs_cost_type` on `cost_type`
+
+**RLSポリシー:**
+- ALL: 認証済みユーザー全員が全操作可能
+
+**削除方式:**
+- 物理削除（履歴テーブル `monthly_costs_history` に自動退避）
 
 ### 5.2 履歴テーブル
 
@@ -466,6 +502,8 @@ DELETE/UPDATE時に自動的にデータを退避する履歴テーブル。
 - `work_days_history`
 - `work_records_history`
 - `expenses_history`
+- `employees_history`
+- `monthly_costs_history`
 
 **共通カラム（元テーブルのカラム + 以下）:**
 - `history_id`: UUID PRIMARY KEY（履歴ID）
@@ -582,6 +620,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE projects;
 ALTER PUBLICATION supabase_realtime ADD TABLE work_days;
 ALTER PUBLICATION supabase_realtime ADD TABLE work_records;
 ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
+ALTER PUBLICATION supabase_realtime ADD TABLE employees;
+ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs;
 ```
 
 ---
@@ -965,7 +1005,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 - 同日複数案件従事時の按分計算
 
 **主要ファイル:**
-- `src/pages/EmployeeListPage.tsx`: 従業員一覧・検索・無効フラグ切替
+- `src/pages/EmployeeListPage.tsx`: 従業員一覧・検索
 - `src/pages/EmployeeFormPage.tsx`: 従業員作成・編集フォーム
 - `src/components/EmployeeCard.tsx`: 従業員カード表示
 - `src/lib/employeesApi.ts`: 従業員API（CRUD）
@@ -977,7 +1017,6 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 #### 従業員一覧（EmployeeListPage）
 - 全従業員を従業員コード順に表示
 - 検索機能（従業員コード・氏名）
-- 「無効な従業員も表示」トグル
 - 給与タイプ別バッジ表示（時給/日給月給/月給）
 
 #### 従業員フォーム（EmployeeFormPage）
@@ -986,7 +1025,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 - 給与タイプ（RadioGroup: 時給/日給月給/月給）
 - 時給（時給タイプの場合のみ表示）
 - 日給（日給月給/月給タイプの場合のみ表示）
-- 有効/無効フラグ
+
+**削除方式:**
+- 物理削除（履歴テーブル `employees_history` に自動退避）
 
 #### 人件費計算ロジック（laborCostApi.ts）
 - **時給の場合**: `時給 × (total_hours || site_hours)`
@@ -1002,6 +1043,59 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 - クリック時に`calculateLaborCost()`を呼び出し
 - 計算結果をダイアログで表示（内訳・合計）
 - 「反映する」ボタンで`labor_cost`フィールドに値をセット
+
+---
+
+### Phase 8: 月次経費管理・粗利計算（完了 ✅）
+
+**実装内容:**
+- 月次経費（固定費・変動費）の管理画面
+- 定型カテゴリ選択 + その他（自由入力）
+- 前月からコピー機能
+- ダッシュボードに固定費・変動費・粗利表示を追加
+- 月別グラフに固定費・変動費を追加
+
+**主要ファイル:**
+- `src/pages/MonthlyCostPage.tsx`: 月次経費管理ページ
+- `src/lib/monthlyCostsApi.ts`: 月次経費API（CRUD + コピー）
+- `src/schemas/monthlyCostSchema.ts`: Zodバリデーション
+- `src/pages/DashboardPage.tsx`: 固定費・変動費・粗利表示追加
+- `src/lib/dashboardApi.ts`: 月次経費集計機能追加
+- `src/components/MonthlyChart.tsx`: 固定費・変動費をグラフに追加
+
+**機能詳細:**
+
+#### 月次経費ページ（MonthlyCostPage）
+- 月選択ナビゲーション（前月・次月）
+- 固定費セクション（合計金額表示）
+- 変動費セクション（合計金額表示）
+- 各項目の編集・削除機能
+- 「新規登録」ダイアログ
+  - 経費種別選択（固定費/変動費）
+  - カテゴリ選択（定型 + その他自由入力）
+  - 金額・備考入力
+- 「前月からコピー」機能
+
+#### 定型カテゴリ
+- **固定費**: 地代家賃、水道光熱費、通信費、保険料、リース料、その他
+- **変動費**: カード決済手数料、消耗品費、車両燃料費、その他
+
+#### ダッシュボード更新
+- サマリーカードに追加:
+  - 固定費（紫色アイコン）
+  - 変動費（オレンジ色アイコン）
+  - 粗利（緑/赤のバリアント表示）
+- 粗利計算: `売上 - 経費 - 人件費 - 固定費 - 変動費`
+- 月別グラフに固定費・変動費を追加
+
+#### API層（monthlyCostsApi.ts）
+- `getMonthlyCostsByMonth(yearMonth)`: 月指定で取得
+- `getMonthlyCostsByRange(startMonth, endMonth)`: 期間指定で取得
+- `createMonthlyCost(cost)`: 作成
+- `updateMonthlyCost(id, cost)`: 更新
+- `deleteMonthlyCost(id)`: 削除
+- `copyFromPreviousMonth(yearMonth)`: 前月からコピー
+- `getMonthlyCostTotals(yearMonth)`: 固定費・変動費合計取得
 
 ---
 
@@ -1161,16 +1255,10 @@ INSERT INTO fields (id, field_code, field_name, ...) VALUES
 **ブランチ:** main
 
 **コミット履歴（最新）:**
-1. `14674aa` - fix: 従事者稼働記録の出勤時間デフォルトを08:00に変更
-2. `7d929ea` - feat: 従事者稼働記録を4時刻カラムに拡張
-3. `a5ace10` - feat: ダッシュボードに期間指定機能を追加
-4. `43afaa5` - feat: 作業日一覧に複製ボタンを追加
-5. `77842fe` - feat: 従事者稼働に休憩時間フィールドと複製ボタンを追加
-6. `5295fa3` - fix: 現場削除時の外部キー制約エラーメッセージを改善
-7. `d541ec3` - fix: 現場フォームの移動費フィールドでNaNエラーが発生する問題を修正
-8. `b07b52f` - feat: Phase 6 高度な分析・エクスポート機能を実装
-9. `13f181b` - docs: Phase 5完了に伴うREADME更新
-10. `7ebd294` - feat: Phase 5 ダッシュボード・分析機能を実装
+- 月次経費管理機能（固定費・変動費）を実装
+- ダッシュボードに固定費・変動費・粗利表示を追加
+- 従業員管理を履歴テーブル方式に変更（is_active削除）
+- 月別グラフに固定費・変動費を追加
 
 ---
 

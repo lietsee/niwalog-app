@@ -1,4 +1,4 @@
-import { Pencil, Trash2, UserCheck, UserX } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,7 +8,6 @@ interface EmployeeCardProps {
   employee: Employee
   onEdit: (employee: Employee) => void
   onDelete: (employee: Employee) => void
-  onReactivate?: (employee: Employee) => void
 }
 
 const salaryTypeLabels: Record<SalaryType, string> = {
@@ -27,7 +26,6 @@ export function EmployeeCard({
   employee,
   onEdit,
   onDelete,
-  onReactivate,
 }: EmployeeCardProps) {
   const formatCurrency = (amount: number | null) => {
     if (amount === null) return '-'
@@ -35,7 +33,7 @@ export function EmployeeCard({
   }
 
   return (
-    <Card className={`${!employee.is_active ? 'opacity-60' : ''}`}>
+    <Card>
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex-1">
@@ -44,9 +42,6 @@ export function EmployeeCard({
               <Badge variant={salaryTypeVariants[employee.salary_type]}>
                 {salaryTypeLabels[employee.salary_type]}
               </Badge>
-              {!employee.is_active && (
-                <Badge variant="destructive">無効</Badge>
-              )}
             </div>
 
             <h3 className="font-semibold text-lg mb-2">{employee.name}</h3>
@@ -61,16 +56,6 @@ export function EmployeeCard({
           </div>
 
           <div className="flex gap-1 ml-2">
-            {!employee.is_active && onReactivate ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onReactivate(employee)}
-                title="再有効化"
-              >
-                <UserCheck className="h-4 w-4 text-green-600" />
-              </Button>
-            ) : null}
             <Button
               variant="ghost"
               size="icon"
@@ -78,26 +63,14 @@ export function EmployeeCard({
             >
               <Pencil className="h-4 w-4" />
             </Button>
-            {employee.is_active ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onDelete(employee)}
-                className="text-destructive hover:text-destructive"
-              >
-                <UserX className="h-4 w-4" />
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onDelete(employee)}
-                className="text-destructive hover:text-destructive"
-                title="完全削除"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onDelete(employee)}
+              className="text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </CardContent>

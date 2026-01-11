@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { MapPin, Briefcase, TrendingUp, Receipt, Users, BarChart3, History, ChevronLeft, ChevronRight, UserCog } from 'lucide-react'
+import { MapPin, Briefcase, TrendingUp, Receipt, Users, BarChart3, History, ChevronLeft, ChevronRight, UserCog, Building, CreditCard, Wallet } from 'lucide-react'
 import { format, subMonths, addMonths } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,7 @@ import type { DashboardSummary, MonthlyStats, RecentProject, EmployeeWorkSummary
 type PeriodMode = 'single' | 'range'
 
 interface DashboardPageProps {
-  onNavigate: (page: 'field-list' | 'analysis' | 'history' | 'employee-list') => void
+  onNavigate: (page: 'field-list' | 'analysis' | 'history' | 'employee-list' | 'monthly-cost') => void
 }
 
 function formatCurrency(value: number): string {
@@ -164,6 +164,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               <UserCog className="h-4 w-4 mr-2" />
               従業員
             </Button>
+            <Button variant="outline" onClick={() => onNavigate('monthly-cost')}>
+              <Wallet className="h-4 w-4 mr-2" />
+              月次経費
+            </Button>
             <Button onClick={() => onNavigate('field-list')}>
               <MapPin className="h-4 w-4 mr-2" />
               現場一覧
@@ -236,7 +240,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </div>
 
         {/* サマリーカード */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 mb-4">
           <StatCard
             title="現場数"
             value={summary?.totalFields || 0}
@@ -248,19 +252,37 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             icon={Briefcase}
           />
           <StatCard
-            title={`${getPeriodLabel()}売上`}
+            title={`売上`}
             value={formatCurrency(summary?.monthlyInvoice || 0)}
             icon={TrendingUp}
           />
           <StatCard
-            title={`${getPeriodLabel()}経費`}
+            title={`経費`}
             value={formatCurrency(summary?.monthlyExpense || 0)}
             icon={Receipt}
           />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
-            title={`${getPeriodLabel()}人件費`}
+            title={`人件費`}
             value={formatCurrency(summary?.monthlyLaborCost || 0)}
             icon={Users}
+          />
+          <StatCard
+            title={`固定費`}
+            value={formatCurrency(summary?.monthlyFixedCost || 0)}
+            icon={Building}
+          />
+          <StatCard
+            title={`変動費`}
+            value={formatCurrency(summary?.monthlyVariableCost || 0)}
+            icon={CreditCard}
+          />
+          <StatCard
+            title={`粗利`}
+            value={formatCurrency(summary?.grossProfit || 0)}
+            icon={Wallet}
+            variant={(summary?.grossProfit || 0) >= 0 ? 'success' : 'destructive'}
           />
         </div>
 

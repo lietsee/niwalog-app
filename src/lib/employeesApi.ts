@@ -7,7 +7,6 @@ export type EmployeeInput = {
   salary_type: SalaryType
   hourly_rate: number | null
   daily_rate: number | null
-  is_active?: boolean
 }
 
 /**
@@ -37,30 +36,11 @@ export async function listAllEmployees(): Promise<ApiResponse<Employee[]>> {
 }
 
 /**
- * 有効な従業員のみ取得
+ * 全従業員取得（listAllEmployeesのエイリアス、互換性維持用）
+ * @deprecated Use listAllEmployees instead
  */
 export async function listActiveEmployees(): Promise<ApiResponse<Employee[]>> {
-  try {
-    const { data, error } = await supabase
-      .from('employees')
-      .select('*')
-      .eq('is_active', true)
-      .order('employee_code')
-
-    if (error) {
-      console.error('Supabase error:', error)
-      return { data: null, error: error.message, status: 400 }
-    }
-
-    return { data: data || [], error: null, status: 200 }
-  } catch (err) {
-    console.error('Unexpected error:', err)
-    return {
-      data: null,
-      error: 'システムエラーが発生しました',
-      status: 500,
-    }
-  }
+  return listAllEmployees()
 }
 
 /**
@@ -168,7 +148,6 @@ export async function createEmployee(
       .from('employees')
       .insert({
         ...employee,
-        is_active: employee.is_active ?? true,
         created_by: user?.id || null,
       })
       .select('*')
@@ -222,7 +201,7 @@ export async function updateEmployee(
 }
 
 /**
- * 従業員削除（論理削除: is_active = false）
+ * 従業員削除（物理削除、履歴テーブルに自動退避）
  */
 export async function deleteEmployee(
   employeeCode: string
@@ -230,7 +209,7 @@ export async function deleteEmployee(
   try {
     const { error } = await supabase
       .from('employees')
-      .update({ is_active: false })
+      .delete()
       .eq('employee_code', employeeCode)
 
     if (error) {
@@ -239,36 +218,6 @@ export async function deleteEmployee(
     }
 
     return { data: null, error: null, status: 200 }
-  } catch (err) {
-    console.error('Unexpected error:', err)
-    return {
-      data: null,
-      error: 'システムエラーが発生しました',
-      status: 500,
-    }
-  }
-}
-
-/**
- * 従業員を再有効化
- */
-export async function reactivateEmployee(
-  employeeCode: string
-): Promise<ApiResponse<Employee>> {
-  try {
-    const { data, error } = await supabase
-      .from('employees')
-      .update({ is_active: true })
-      .eq('employee_code', employeeCode)
-      .select('*')
-      .single()
-
-    if (error) {
-      console.error('Supabase error:', error)
-      return { data: null, error: error.message, status: 400 }
-    }
-
-    return { data, error: null, status: 200 }
   } catch (err) {
     console.error('Unexpected error:', err)
     return {

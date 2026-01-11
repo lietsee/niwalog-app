@@ -14,6 +14,7 @@ import { EmployeeListPage } from '@/pages/EmployeeListPage'
 import { EmployeeFormPage } from '@/pages/EmployeeFormPage'
 import { AnalysisPage } from '@/pages/AnalysisPage'
 import { HistoryPage } from '@/pages/HistoryPage'
+import { MonthlyCostPage } from '@/pages/MonthlyCostPage'
 import type { Page } from '@/lib/types'
 
 function App() {
@@ -176,6 +177,9 @@ function App() {
         )}
         {currentPage === 'history' && (
           <HistoryPage onNavigate={handleNavigate} />
+        )}
+        {currentPage === 'monthly-cost' && (
+          <MonthlyCostPage onNavigate={handleNavigate} />
         )}
       </div>
       <Toaster position="top-right" />

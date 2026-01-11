@@ -785,28 +785,26 @@ CREATE POLICY "System can archive expenses history" ON expenses_history FOR INSE
 -- ============================================================================
 
 -- employees（従業員マスタ）
+-- 履歴テーブル方式で管理（is_activeは使用しない）
 CREATE TABLE employees (
   employee_code VARCHAR(10) PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   salary_type VARCHAR(10) NOT NULL CHECK (salary_type IN ('hourly', 'daily', 'monthly')),
   hourly_rate INTEGER,
   daily_rate INTEGER,
-  is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   created_by UUID REFERENCES auth.users(id)
 );
 
-COMMENT ON TABLE employees IS '従業員マスタ: 従業員情報と給与タイプ・単価を管理';
+COMMENT ON TABLE employees IS '従業員マスタ: 従業員情報と給与タイプ・単価を管理（アクティブなレコードのみ）';
 COMMENT ON COLUMN employees.employee_code IS '従業員コード（主キー）';
 COMMENT ON COLUMN employees.name IS '従業員氏名';
 COMMENT ON COLUMN employees.salary_type IS '給与タイプ: hourly=時給, daily=日給月給, monthly=月給';
 COMMENT ON COLUMN employees.hourly_rate IS '時給（円）- salary_type=hourly の場合に使用';
 COMMENT ON COLUMN employees.daily_rate IS '日給（円）- salary_type=daily/monthly の場合に使用';
-COMMENT ON COLUMN employees.is_active IS '有効フラグ（論理削除用）';
 
 -- インデックス
-CREATE INDEX idx_employees_active ON employees(is_active);
 CREATE INDEX idx_employees_salary_type ON employees(salary_type);
 
 -- RLS
@@ -819,6 +817,197 @@ BEFORE UPDATE ON employees
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
+-- 6-H. employees_history（従業員マスタ履歴）
+-- ============================================================================
+
+CREATE TABLE employees_history (
+  history_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- 元のレコード情報
+  employee_code VARCHAR(10) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  salary_type VARCHAR(10) NOT NULL,
+  hourly_rate INTEGER,
+  daily_rate INTEGER,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  created_by UUID,
+
+  -- 履歴管理情報
+  operation_type VARCHAR(10) NOT NULL,     -- 'UPDATE' or 'DELETE'
+  operation_at TIMESTAMPTZ DEFAULT NOW(),  -- 操作日時
+  operation_by UUID REFERENCES auth.users(id), -- 操作者
+  reason TEXT                              -- 削除・更新理由（任意）
+);
+
+-- インデックス
+CREATE INDEX idx_employees_history_code ON employees_history(employee_code);
+CREATE INDEX idx_employees_history_operation_at ON employees_history(operation_at DESC);
+
+-- コメント
+COMMENT ON TABLE employees_history IS '従業員マスタ履歴: 削除・更新された従業員情報を保管';
+COMMENT ON COLUMN employees_history.operation_type IS '操作種別: UPDATE（更新前の状態）, DELETE（削除されたレコード）';
+
+-- RLS
+ALTER TABLE employees_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view employees history" ON employees_history FOR SELECT USING (true);
+CREATE POLICY "System can archive employees history" ON employees_history FOR INSERT WITH CHECK (true);
+
+-- 履歴テーブルへの自動退避トリガー
+CREATE OR REPLACE FUNCTION archive_employees_to_history()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    INSERT INTO employees_history (
+      employee_code, name, salary_type, hourly_rate, daily_rate,
+      created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.employee_code, OLD.name, OLD.salary_type, OLD.hourly_rate, OLD.daily_rate,
+      OLD.created_at, OLD.updated_at, OLD.created_by,
+      'DELETE', auth.uid()
+    );
+    RETURN OLD;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO employees_history (
+      employee_code, name, salary_type, hourly_rate, daily_rate,
+      created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.employee_code, OLD.name, OLD.salary_type, OLD.hourly_rate, OLD.daily_rate,
+      OLD.created_at, OLD.updated_at, OLD.created_by,
+      'UPDATE', auth.uid()
+    );
+    RETURN NEW;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_archive_employees
+BEFORE UPDATE OR DELETE ON employees
+FOR EACH ROW
+EXECUTE FUNCTION archive_employees_to_history();
+
+-- ============================================================================
+-- 7. monthly_costs（月次経費）
+-- ============================================================================
+-- 月ごとの固定費（地代家賃など）や変動費（カード決済費用など）を管理
+
+CREATE TABLE monthly_costs (
+  -- 主キー
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- 対象年月
+  year_month VARCHAR(7) NOT NULL,          -- 対象年月（例: 2026-01）
+
+  -- 経費情報
+  cost_type VARCHAR(20) NOT NULL CHECK (cost_type IN ('fixed', 'variable')),  -- 種別: fixed=固定費, variable=変動費
+  category VARCHAR(100) NOT NULL,          -- カテゴリ（例: 地代家賃、通信費）
+  amount INTEGER NOT NULL,                 -- 金額（円）
+  notes TEXT,                              -- 備考
+
+  -- メタデータ
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID REFERENCES auth.users(id)
+);
+
+-- インデックス
+CREATE INDEX idx_monthly_costs_year_month ON monthly_costs(year_month);
+CREATE INDEX idx_monthly_costs_type ON monthly_costs(cost_type);
+CREATE INDEX idx_monthly_costs_year_month_type ON monthly_costs(year_month, cost_type);
+
+-- コメント
+COMMENT ON TABLE monthly_costs IS '月次経費: 月ごとの固定費・変動費を管理';
+COMMENT ON COLUMN monthly_costs.year_month IS '対象年月（例: 2026-01）';
+COMMENT ON COLUMN monthly_costs.cost_type IS '経費種別: fixed=固定費, variable=変動費';
+COMMENT ON COLUMN monthly_costs.category IS 'カテゴリ（例: 地代家賃、通信費、カード決済手数料）';
+COMMENT ON COLUMN monthly_costs.amount IS '金額（円）';
+
+-- RLS
+ALTER TABLE monthly_costs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated users can manage monthly_costs" ON monthly_costs FOR ALL USING (auth.role() = 'authenticated');
+
+-- updated_at自動更新トリガー
+CREATE TRIGGER update_monthly_costs_updated_at
+BEFORE UPDATE ON monthly_costs
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- 7-H. monthly_costs_history（月次経費履歴）
+-- ============================================================================
+
+CREATE TABLE monthly_costs_history (
+  history_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- 元のレコード情報
+  id UUID NOT NULL,
+  year_month VARCHAR(7) NOT NULL,
+  cost_type VARCHAR(20) NOT NULL,
+  category VARCHAR(100) NOT NULL,
+  amount INTEGER NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  created_by UUID,
+
+  -- 履歴管理情報
+  operation_type VARCHAR(10) NOT NULL,     -- 'UPDATE' or 'DELETE'
+  operation_at TIMESTAMPTZ DEFAULT NOW(),  -- 操作日時
+  operation_by UUID REFERENCES auth.users(id), -- 操作者
+  reason TEXT                              -- 削除・更新理由（任意）
+);
+
+-- インデックス
+CREATE INDEX idx_monthly_costs_history_id ON monthly_costs_history(id);
+CREATE INDEX idx_monthly_costs_history_year_month ON monthly_costs_history(year_month);
+CREATE INDEX idx_monthly_costs_history_operation_at ON monthly_costs_history(operation_at DESC);
+
+-- コメント
+COMMENT ON TABLE monthly_costs_history IS '月次経費履歴: 削除・更新された月次経費情報を保管';
+COMMENT ON COLUMN monthly_costs_history.operation_type IS '操作種別: UPDATE（更新前の状態）, DELETE（削除されたレコード）';
+
+-- RLS
+ALTER TABLE monthly_costs_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view monthly_costs history" ON monthly_costs_history FOR SELECT USING (true);
+CREATE POLICY "System can archive monthly_costs history" ON monthly_costs_history FOR INSERT WITH CHECK (true);
+
+-- 履歴テーブルへの自動退避トリガー
+CREATE OR REPLACE FUNCTION archive_monthly_costs_to_history()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    INSERT INTO monthly_costs_history (
+      id, year_month, cost_type, category, amount, notes,
+      created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.year_month, OLD.cost_type, OLD.category, OLD.amount, OLD.notes,
+      OLD.created_at, OLD.updated_at, OLD.created_by,
+      'DELETE', auth.uid()
+    );
+    RETURN OLD;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO monthly_costs_history (
+      id, year_month, cost_type, category, amount, notes,
+      created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.year_month, OLD.cost_type, OLD.category, OLD.amount, OLD.notes,
+      OLD.created_at, OLD.updated_at, OLD.created_by,
+      'UPDATE', auth.uid()
+    );
+    RETURN NEW;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_archive_monthly_costs
+BEFORE UPDATE OR DELETE ON monthly_costs
+FOR EACH ROW
+EXECUTE FUNCTION archive_monthly_costs_to_history();
+
+-- ============================================================================
 -- リアルタイム機能の有効化
 -- ============================================================================
 
@@ -829,6 +1018,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE work_days;
 ALTER PUBLICATION supabase_realtime ADD TABLE work_records;
 ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 ALTER PUBLICATION supabase_realtime ADD TABLE employees;
+ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs;
 
 -- 履歴テーブルもリアルタイム対象に（監査用）
 ALTER PUBLICATION supabase_realtime ADD TABLE fields_history;
@@ -836,6 +1026,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE projects_history;
 ALTER PUBLICATION supabase_realtime ADD TABLE work_days_history;
 ALTER PUBLICATION supabase_realtime ADD TABLE work_records_history;
 ALTER PUBLICATION supabase_realtime ADD TABLE expenses_history;
+ALTER PUBLICATION supabase_realtime ADD TABLE employees_history;
+ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs_history;
 
 -- ============================================================================
 -- サンプルデータ（テスト用）

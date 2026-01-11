@@ -26,7 +26,6 @@ export const employeeSchema = z
       .min(0, '日給は0以上で入力してください')
       .nullable()
       .optional(),
-    is_active: z.boolean().optional().default(true),
   })
   .superRefine((data, ctx) => {
     // 時給の場合は時給が必須

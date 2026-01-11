@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Search, ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { Plus, Search, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -15,10 +15,8 @@ import {
 import { EmployeeCard } from '@/components/EmployeeCard'
 import {
   listAllEmployees,
-  listActiveEmployees,
   searchEmployees,
   deleteEmployee,
-  reactivateEmployee,
 } from '@/lib/employeesApi'
 import { translateSupabaseError } from '@/lib/errorMessages'
 import type { Employee, Page } from '@/lib/types'
@@ -32,7 +30,6 @@ export function EmployeeListPage({ onNavigate }: EmployeeListPageProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [showInactive, setShowInactive] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -41,9 +38,7 @@ export function EmployeeListPage({ onNavigate }: EmployeeListPageProps) {
     setLoading(true)
     setError(null)
 
-    const { data, error: err } = showInactive
-      ? await listAllEmployees()
-      : await listActiveEmployees()
+    const { data, error: err } = await listAllEmployees()
 
     if (err) {
       setError(err)
@@ -56,7 +51,7 @@ export function EmployeeListPage({ onNavigate }: EmployeeListPageProps) {
 
   useEffect(() => {
     loadEmployees()
-  }, [showInactive])
+  }, [])
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) {
@@ -73,11 +68,7 @@ export function EmployeeListPage({ onNavigate }: EmployeeListPageProps) {
       setError(err)
       toast.error(`検索に失敗しました: ${err}`)
     } else {
-      // 無効な従業員の表示フィルタを適用
-      const filtered = showInactive
-        ? data || []
-        : (data || []).filter((e) => e.is_active)
-      setEmployees(filtered)
+      setEmployees(data || [])
     }
 
     setLoading(false)
@@ -92,16 +83,6 @@ export function EmployeeListPage({ onNavigate }: EmployeeListPageProps) {
     setDeleteDialogOpen(true)
   }
 
-  const handleReactivate = async (employee: Employee) => {
-    const { error: err } = await reactivateEmployee(employee.employee_code)
-    if (err) {
-      toast.error(`再有効化に失敗しました: ${translateSupabaseError(err)}`)
-    } else {
-      toast.success(`${employee.name}を再有効化しました`)
-      loadEmployees()
-    }
-  }
-
   const confirmDelete = async () => {
     if (!employeeToDelete) return
 
@@ -114,24 +95,12 @@ export function EmployeeListPage({ onNavigate }: EmployeeListPageProps) {
       toast.error(translatedError)
       setDeleting(false)
     } else {
-      if (showInactive) {
-        // 無効化されたので、リストを更新
-        setEmployees(
-          employees.map((e) =>
-            e.employee_code === employeeToDelete.employee_code
-              ? { ...e, is_active: false }
-              : e
-          )
+      setEmployees(
+        employees.filter(
+          (e) => e.employee_code !== employeeToDelete.employee_code
         )
-      } else {
-        // 有効な従業員のみ表示中なので、リストから除外
-        setEmployees(
-          employees.filter(
-            (e) => e.employee_code !== employeeToDelete.employee_code
-          )
-        )
-      }
-      toast.success('従業員を無効化しました')
+      )
+      toast.success('従業員を削除しました')
       setDeleteDialogOpen(false)
       setEmployeeToDelete(null)
       setDeleting(false)
@@ -196,23 +165,6 @@ export function EmployeeListPage({ onNavigate }: EmployeeListPageProps) {
                 クリア
               </Button>
             )}
-            <Button
-              onClick={() => setShowInactive(!showInactive)}
-              variant={showInactive ? 'default' : 'outline'}
-              title={showInactive ? '有効な従業員のみ表示' : '無効な従業員も表示'}
-            >
-              {showInactive ? (
-                <>
-                  <Eye className="h-4 w-4 mr-2" />
-                  全て表示中
-                </>
-              ) : (
-                <>
-                  <EyeOff className="h-4 w-4 mr-2" />
-                  有効のみ
-                </>
-              )}
-            </Button>
           </div>
         </div>
 
@@ -240,7 +192,6 @@ export function EmployeeListPage({ onNavigate }: EmployeeListPageProps) {
                 employee={employee}
                 onEdit={handleEdit}
                 onDelete={handleDeleteClick}
-                onReactivate={showInactive ? handleReactivate : undefined}
               />
             ))}
           </div>
@@ -251,12 +202,12 @@ export function EmployeeListPage({ onNavigate }: EmployeeListPageProps) {
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>従業員を無効化しますか？</DialogTitle>
+            <DialogTitle>従業員を削除しますか？</DialogTitle>
             <DialogDescription>
               「{employeeToDelete?.name}」（{employeeToDelete?.employee_code}
-              ）を無効化します。
+              ）を削除します。
               <br />
-              無効化された従業員は後から再有効化できます。
+              削除された従業員情報は履歴テーブルに保管されます。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -272,7 +223,7 @@ export function EmployeeListPage({ onNavigate }: EmployeeListPageProps) {
               onClick={confirmDelete}
               disabled={deleting}
             >
-              {deleting ? '処理中...' : '無効化'}
+              {deleting ? '処理中...' : '削除'}
             </Button>
           </DialogFooter>
         </DialogContent>

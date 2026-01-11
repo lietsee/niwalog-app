@@ -109,7 +109,22 @@ export type Employee = {
   salary_type: SalaryType
   hourly_rate: number | null
   daily_rate: number | null
-  is_active: boolean
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
+// CostType (経費種別)
+export type CostType = 'fixed' | 'variable'
+
+// MonthlyCost (月次経費)
+export type MonthlyCost = {
+  id: string
+  year_month: string
+  cost_type: CostType
+  category: string
+  amount: number
+  notes: string | null
   created_at: string
   updated_at: string
   created_by: string | null
@@ -134,6 +149,9 @@ export type DashboardSummary = {
   monthlyInvoice: number
   monthlyExpense: number
   monthlyLaborCost: number
+  monthlyFixedCost: number
+  monthlyVariableCost: number
+  grossProfit: number
 }
 
 // Monthly Stats
@@ -142,6 +160,9 @@ export type MonthlyStats = {
   invoice: number
   expense: number
   laborCost: number
+  fixedCost: number
+  variableCost: number
+  grossProfit: number
 }
 
 // Employee Work Summary
@@ -223,5 +244,6 @@ export type Page =
   | 'expense-form'
   | 'employee-list'
   | 'employee-form'
+  | 'monthly-cost'
   | 'analysis'
   | 'history'
