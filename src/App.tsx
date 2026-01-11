@@ -7,6 +7,9 @@ import { FieldListPage } from '@/pages/FieldListPage'
 import { FieldFormPage } from '@/pages/FieldFormPage'
 import { ProjectListPage } from '@/pages/ProjectListPage'
 import { ProjectFormPage } from '@/pages/ProjectFormPage'
+import { ProjectDetailPage } from '@/pages/ProjectDetailPage'
+import { WorkDayFormPage } from '@/pages/WorkDayFormPage'
+import { ExpenseFormPage } from '@/pages/ExpenseFormPage'
 import type { Page } from '@/lib/types'
 
 function App() {
@@ -19,6 +22,12 @@ function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(
     undefined
   )
+  const [selectedWorkDayId, setSelectedWorkDayId] = useState<string | undefined>(
+    undefined
+  )
+  const [selectedExpenseId, setSelectedExpenseId] = useState<string | undefined>(
+    undefined
+  )
 
   const handleNavigate = (page: Page, id?: string) => {
     setCurrentPage(page)
@@ -29,6 +38,14 @@ function App() {
       setSelectedProjectId(undefined)
     } else if (page === 'project-form') {
       setSelectedProjectId(id)
+    } else if (page === 'project-detail') {
+      setSelectedProjectId(id)
+      setSelectedWorkDayId(undefined)
+      setSelectedExpenseId(undefined)
+    } else if (page === 'work-day-form') {
+      setSelectedWorkDayId(id)
+    } else if (page === 'expense-form') {
+      setSelectedExpenseId(id)
     }
   }
 
@@ -97,6 +114,7 @@ function App() {
             onBack={() => handleNavigate('field-list')}
             onCreateProject={() => handleNavigate('project-form')}
             onEditProject={(projectId) => handleNavigate('project-form', projectId)}
+            onClickProject={(projectId) => handleNavigate('project-detail', projectId)}
           />
         )}
         {currentPage === 'project-form' && selectedFieldId && (
@@ -105,6 +123,32 @@ function App() {
             projectId={selectedProjectId}
             onBack={() => handleNavigate('project-list', selectedFieldId)}
             onSuccess={() => handleNavigate('project-list', selectedFieldId)}
+          />
+        )}
+        {currentPage === 'project-detail' && selectedProjectId && (
+          <ProjectDetailPage
+            projectId={selectedProjectId}
+            onBack={() => handleNavigate('project-list', selectedFieldId)}
+            onCreateWorkDay={() => handleNavigate('work-day-form')}
+            onEditWorkDay={(workDayId) => handleNavigate('work-day-form', workDayId)}
+            onCreateExpense={() => handleNavigate('expense-form')}
+            onEditExpense={(expenseId) => handleNavigate('expense-form', expenseId)}
+          />
+        )}
+        {currentPage === 'work-day-form' && selectedProjectId && (
+          <WorkDayFormPage
+            projectId={selectedProjectId}
+            workDayId={selectedWorkDayId}
+            onBack={() => handleNavigate('project-detail', selectedProjectId)}
+            onSuccess={() => handleNavigate('project-detail', selectedProjectId)}
+          />
+        )}
+        {currentPage === 'expense-form' && selectedProjectId && (
+          <ExpenseFormPage
+            projectId={selectedProjectId}
+            expenseId={selectedExpenseId}
+            onBack={() => handleNavigate('project-detail', selectedProjectId)}
+            onSuccess={() => handleNavigate('project-detail', selectedProjectId)}
           />
         )}
       </div>

@@ -8,6 +8,7 @@ interface ProjectCardProps {
   project: Project
   onEdit: (project: Project) => void
   onDelete: (project: Project) => void
+  onClick?: (project: Project) => void
 }
 
 function formatDate(dateString: string): string {
@@ -27,15 +28,24 @@ function formatCurrency(amount: number | null): string {
   }).format(amount)
 }
 
-export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
+export function ProjectCard({ project, onEdit, onDelete, onClick }: ProjectCardProps) {
   const workTypes: string[] = []
   if (project.work_type_pruning) workTypes.push('剪定')
   if (project.work_type_weeding) workTypes.push('除草')
   if (project.work_type_cleaning) workTypes.push('清掃')
   if (project.work_type_other) workTypes.push(project.work_type_other)
 
+  const handleCardClick = () => {
+    if (onClick) {
+      onClick(project)
+    }
+  }
+
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card
+      className={`hover:shadow-md transition-shadow ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={handleCardClick}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
@@ -51,7 +61,10 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onEdit(project)}
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit(project)
+              }}
               className="h-8 w-8"
             >
               <Pencil className="h-4 w-4" />
@@ -59,7 +72,10 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onDelete(project)}
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(project)
+              }}
               className="h-8 w-8 text-destructive hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" />

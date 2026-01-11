@@ -57,6 +57,54 @@ export type ProjectWithField = Project & {
   }
 }
 
+// WeatherEntry (天候エントリ)
+export type WeatherEntry = {
+  time: string
+  condition: string
+}
+
+// WorkDay (日別作業記録)
+export type WorkDay = {
+  id: string
+  project_id: string
+  work_date: string
+  day_number: number
+  weather: WeatherEntry[] | null
+  work_description: string | null
+  troubles: string | null
+  created_at: string
+  updated_at: string
+}
+
+// WorkDayWithRecords (従事者稼働記録付き作業日)
+export type WorkDayWithRecords = WorkDay & {
+  work_records: WorkRecord[]
+}
+
+// WorkRecord (従事者稼働記録)
+export type WorkRecord = {
+  id: string
+  work_day_id: string
+  employee_code: string
+  start_time: string
+  end_time: string
+  working_hours: number | null
+  created_at: string
+  updated_at: string
+}
+
+// Expense (経費)
+export type Expense = {
+  id: string
+  project_id: string
+  expense_item: string
+  amount: number
+  notes: string | null
+  expense_date: string | null
+  created_at: string
+  updated_at: string
+}
+
 // Page Type for routing
 export type Page =
   | 'login'
@@ -65,5 +113,7 @@ export type Page =
   | 'field-form'
   | 'project-list'
   | 'project-form'
+  | 'project-detail'
   | 'work-day-form'
+  | 'expense-form'
   | 'history'

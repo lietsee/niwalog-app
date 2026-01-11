@@ -22,6 +22,7 @@ interface ProjectListPageProps {
   onBack: () => void
   onCreateProject: () => void
   onEditProject: (projectId: string) => void
+  onClickProject: (projectId: string) => void
 }
 
 export function ProjectListPage({
@@ -29,6 +30,7 @@ export function ProjectListPage({
   onBack,
   onCreateProject,
   onEditProject,
+  onClickProject,
 }: ProjectListPageProps) {
   const [field, setField] = useState<Field | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
@@ -153,6 +155,7 @@ export function ProjectListPage({
                 project={project}
                 onEdit={handleEdit}
                 onDelete={handleDeleteClick}
+                onClick={(p) => onClickProject(p.id)}
               />
             ))}
           </div>
