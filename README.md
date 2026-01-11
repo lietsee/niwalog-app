@@ -32,7 +32,8 @@ NiwaLogは、造園・庭園管理業務における現場ごとの詳細情報�
 
 - **現場マスタ管理**: 現場情報のCRUD、検索機能
 - **案件管理**: 実施日ごとの作業記録、自動採番
-- **日別作業記録**: 複数日作業の管理と従事者稼働記録（未実装）
+- **日別作業記録**: 複数日作業の管理と従事者稼働記録
+- **経費管理**: 案件ごとの経費記録と合計計算
 - **ダッシュボード**: 収益性分析、稼働分析（未実装）
 
 ---
@@ -202,6 +203,9 @@ niwalog-app/
 │   │   ├── types.ts              # 共通型定義
 │   │   ├── fieldsApi.ts          # 現場API（全CRUD + 検索）
 │   │   ├── projectsApi.ts        # 案件API（全CRUD + 自動採番）
+│   │   ├── workDaysApi.ts        # 作業日API（全CRUD + 自動採番）
+│   │   ├── workRecordsApi.ts     # 従事者稼働API（CRUD + 一括作成）
+│   │   ├── expensesApi.ts        # 経費API（CRUD + 合計計算）
 │   │   ├── errorMessages.ts      # エラーメッセージ翻訳
 │   │   └── utils.ts              # ユーティリティ関数
 │   ├── pages/                    # ページコンポーネント
@@ -210,7 +214,10 @@ niwalog-app/
 │   │   ├── FieldListPage.tsx     # 現場一覧・検索・削除
 │   │   ├── FieldFormPage.tsx     # 現場作成・編集フォーム
 │   │   ├── ProjectListPage.tsx   # 案件一覧・削除
-│   │   └── ProjectFormPage.tsx   # 案件作成・編集フォーム
+│   │   ├── ProjectFormPage.tsx   # 案件作成・編集フォーム
+│   │   ├── ProjectDetailPage.tsx # 案件詳細（作業日・経費タブ）
+│   │   ├── WorkDayFormPage.tsx   # 作業日作成・編集フォーム
+│   │   └── ExpenseFormPage.tsx   # 経費作成・編集フォーム
 │   ├── components/               # UIコンポーネント
 │   │   ├── ui/                   # Radix UI ベースコンポーネント
 │   │   │   ├── button.tsx
@@ -220,12 +227,20 @@ niwalog-app/
 │   │   │   ├── label.tsx
 │   │   │   ├── textarea.tsx
 │   │   │   ├── checkbox.tsx
-│   │   │   └── badge.tsx
+│   │   │   ├── badge.tsx
+│   │   │   ├── tabs.tsx          # タブUI
+│   │   │   └── alert-dialog.tsx  # 確認ダイアログ
 │   │   ├── FieldCard.tsx         # 現場カード表示
-│   │   └── ProjectCard.tsx       # 案件カード表示
+│   │   ├── ProjectCard.tsx       # 案件カード表示
+│   │   ├── WorkDayCard.tsx       # 作業日カード表示
+│   │   ├── ExpenseCard.tsx       # 経費カード表示
+│   │   ├── WeatherInput.tsx      # 天候入力（動的配列）
+│   │   └── WorkRecordInput.tsx   # 従事者入力（動的配列）
 │   ├── schemas/                  # Zodバリデーションスキーマ
 │   │   ├── fieldSchema.ts
-│   │   └── projectSchema.ts
+│   │   ├── projectSchema.ts
+│   │   ├── workDaySchema.ts      # 作業日バリデーション
+│   │   └── expenseSchema.ts      # 経費バリデーション
 │   ├── App.tsx                   # ルーティング・認証チェック
 │   └── main.tsx                  # エントリーポイント
 ├── supabase/
@@ -642,58 +657,114 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 - 人件費: 0以上の整数（任意）
 - 振り返り項目: テキスト（任意）
 
+### Phase 4: 日別作業記録・従事者稼働・経費管理（完了 ✅）
+
+**実装内容:**
+- 日別作業記録CRUD（作成・読取・更新・削除）
+- 従事者稼働記録CRUD（作業日フォーム内インライン編集）
+- 経費CRUD（案件ごとの経費管理）
+- 天候情報の動的配列入力
+- タブUIによる作業日・経費切替
+- 削除確認ダイアログ
+
+**主要ファイル:**
+- `src/pages/ProjectDetailPage.tsx`: 案件詳細（作業日・経費タブ）
+- `src/pages/WorkDayFormPage.tsx`: 作業日作成・編集フォーム
+- `src/pages/ExpenseFormPage.tsx`: 経費作成・編集フォーム
+- `src/components/WorkDayCard.tsx`: 作業日カード表示
+- `src/components/ExpenseCard.tsx`: 経費カード表示
+- `src/components/WeatherInput.tsx`: 天候入力（動的配列）
+- `src/components/WorkRecordInput.tsx`: 従事者入力（動的配列）
+- `src/lib/workDaysApi.ts`: 作業日API
+- `src/lib/workRecordsApi.ts`: 従事者稼働API
+- `src/lib/expensesApi.ts`: 経費API
+- `src/schemas/workDaySchema.ts`: 作業日バリデーション
+- `src/schemas/expenseSchema.ts`: 経費バリデーション
+
+**機能詳細:**
+
+#### 画面遷移
+```
+現場一覧 → 案件一覧 → 案件カードクリック → 案件詳細（タブ）
+                                           ├→ 作業日タブ → 作業日フォーム
+                                           └→ 経費タブ → 経費フォーム
+```
+
+#### 案件詳細（ProjectDetailPage）
+- タブUIで「作業日」「経費」を切替
+- 作業日タブ:
+  - 作業日一覧をカードで表示（日番号順）
+  - 「作業日を追加」ボタン
+  - 各カードに編集・削除ボタン
+- 経費タブ:
+  - 経費一覧をカードで表示
+  - 経費合計金額を表示
+  - 「経費を追加」ボタン
+  - 各カードに編集・削除ボタン
+- 削除確認ダイアログ（AlertDialog）
+
+#### 作業日フォーム（WorkDayFormPage）
+- フォームセクション:
+  - 基本情報（作業日、日番号）
+  - 天候情報（動的配列: 時刻 + 天候）
+  - 作業内容（作業内容詳細、トラブル・特記事項）
+  - 従事者稼働（動的配列: 従業員コード + 開始時刻 + 終了時刻）
+- 日番号は自動採番（案件ごとに連番）、編集可能
+- 天候エントリの動的追加・削除
+- 従事者エントリの動的追加・削除
+
+#### 経費フォーム（ExpenseFormPage）
+- フィールド:
+  - 項目名（必須）
+  - 金額（必須）
+  - 使用日（任意）
+  - 備考（任意）
+
+#### API層
+
+**workDaysApi.ts:**
+- `listWorkDaysByProject(projectId)`: 案件ごとの作業日一覧取得
+- `getWorkDayById(id)`: 作業日詳細取得
+- `getWorkDayWithRecords(id)`: 従事者記録付きで作業日取得
+- `getNextDayNumber(projectId)`: 次の日番号を取得（自動採番用）
+- `createWorkDay(workDay)`: 作業日作成
+- `updateWorkDay(id, workDay)`: 作業日更新
+- `deleteWorkDay(id)`: 作業日削除
+
+**workRecordsApi.ts:**
+- `listWorkRecordsByWorkDay(workDayId)`: 作業日ごとの従事者記録取得
+- `createWorkRecord(record)`: 従事者記録作成
+- `createWorkRecords(records)`: 従事者記録一括作成
+- `updateWorkRecord(id, record)`: 従事者記録更新
+- `deleteWorkRecord(id)`: 従事者記録削除
+
+**expensesApi.ts:**
+- `listExpensesByProject(projectId)`: 案件ごとの経費一覧取得
+- `getExpenseById(id)`: 経費詳細取得
+- `getTotalExpensesByProject(projectId)`: 案件ごとの経費合計取得
+- `createExpense(expense)`: 経費作成
+- `updateExpense(id, expense)`: 経費更新
+- `deleteExpense(id)`: 経費削除
+
+#### バリデーション
+
+**workDaySchema.ts:**
+- 日番号: 必須、1以上の整数
+- 作業日: 必須
+- 天候: 配列（各エントリ: 時刻 + 天候）
+- 作業内容詳細: テキスト（任意）
+- トラブル: テキスト（任意）
+- 従事者: 配列（各エントリ: 従業員コード + 開始時刻 + 終了時刻）
+
+**expenseSchema.ts:**
+- 項目名: 必須、255文字以内
+- 金額: 必須、0以上の整数
+- 使用日: 任意
+- 備考: 任意
+
 ---
 
 ## 未実装機能
-
-### Phase 4: 日別作業記録・従事者稼働管理（未実装）
-
-**概要:** 1つの案件を複数日に分けて作業する場合の記録と、従事者の稼働時間管理。
-
-**実装予定:**
-
-#### 日別作業記録（work_days）
-- 作業日追加フォーム
-  - 作業日
-  - 天候（時刻ごと、JSONB配列）
-  - 作業内容詳細
-  - トラブル・特記事項
-- 作業日一覧表示（案件ごと）
-- 作業日編集・削除
-
-#### 従事者稼働記録（work_records）
-- 稼働記録追加フォーム
-  - 従業員コード（プルダウンまたは入力）
-  - 開始時刻
-  - 終了時刻
-  - 稼働時間（自動計算）
-- 稼働記録一覧表示（作業日ごと）
-- 稼働記録編集・削除
-- 稼働時間集計（従業員別・案件別）
-
-#### 経費記録（expenses）
-- 経費追加フォーム
-  - 経費項目
-  - 金額
-  - 発生日
-  - 備考
-- 経費一覧表示（案件ごと）
-- 経費編集・削除
-- 経費合計自動計算（案件ごと）
-
-**主要API:**
-- `listWorkDaysByProject(projectId)`
-- `createWorkDay(workDay)`
-- `updateWorkDay(id, workDay)`
-- `deleteWorkDay(id)`
-- `listWorkRecordsByWorkDay(workDayId)`
-- `createWorkRecord(record)`
-- `updateWorkRecord(id, record)`
-- `deleteWorkRecord(id)`
-- `listExpensesByProject(projectId)`
-- `createExpense(expense)`
-- `updateExpense(id, expense)`
-- `deleteExpense(id)`
 
 ### Phase 5: ダッシュボード・分析機能（未実装）
 
@@ -788,13 +859,15 @@ SELECT id, field_code, created_by FROM fields;
 **ブランチ:** main
 
 **コミット履歴（最新）:**
-1. `b22964e` - fix: RLSポリシーを変更し全認証ユーザーが編集可能に
-2. `b3bd71c` - fix: Downgrade Tailwind CSS to v3.4.17 and configure CSS variables
-3. `b8e853e` - feat: 検索機能を拡張（住所・顧客名対応）
-4. `766ac36` - fix: フォームバリデーションとエラーメッセージ改善
-5. `96f55ad` - fix: RLSポリシー修正（UPDATE/DELETE対応）
-6. `d74e368` - feat: Phase 2 現場マスタ管理（Fields CRUD）完成
-7. `67ba474` - feat: Phase 1 authentication and basic UI components
+1. `492123e` - feat: Phase 4 日別作業記録・従事者稼働・経費管理機能を実装
+2. `d7f6a42` - feat: Phase 3 案件管理機能を実装
+3. `20e89ea` - docs: 包括的なドキュメント作成（開発中断・再開用）
+4. `b22964e` - fix: RLSポリシーを変更し全認証ユーザーが編集可能に
+5. `b3bd71c` - fix: Downgrade Tailwind CSS to v3.4.17 and configure CSS variables
+6. `b8e853e` - feat: 検索機能を拡張（住所・顧客名対応）
+7. `766ac36` - fix: フォームバリデーションとエラーメッセージ改善
+8. `d74e368` - feat: Phase 2 現場マスタ管理（Fields CRUD）完成
+9. `67ba474` - feat: Phase 1 authentication and basic UI components
 
 ---
 
