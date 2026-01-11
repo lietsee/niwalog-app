@@ -435,9 +435,10 @@ BEGIN
     NEW.return_hours := NULL;
   END IF;
 
-  -- 総拘束時間（両方ある場合のみ）
+  -- 総拘束時間（両方ある場合のみ）= 退勤 - 出勤 - 休憩
   IF NEW.clock_in IS NOT NULL AND NEW.clock_out IS NOT NULL THEN
-    NEW.total_hours := EXTRACT(EPOCH FROM (NEW.clock_out - NEW.clock_in)) / 3600;
+    NEW.total_hours := (EXTRACT(EPOCH FROM (NEW.clock_out - NEW.clock_in)) / 3600)
+                       - (COALESCE(NEW.break_minutes, 60) / 60.0);
   ELSE
     NEW.total_hours := NULL;
   END IF;
