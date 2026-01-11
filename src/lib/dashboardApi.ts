@@ -1,15 +1,20 @@
 import { supabase } from './supabaseClient'
-import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns'
+import { startOfMonth, endOfMonth, subMonths, addMonths, format } from 'date-fns'
 import type { ApiResponse, DashboardSummary, MonthlyStats, EmployeeWorkSummary, RecentProject } from './types'
 
 /**
  * ダッシュボードサマリー取得
+ * @param startDate 開始日（デフォルト: 今月1日）
+ * @param endDate 終了日（デフォルト: 今月末日）
  */
-export async function getDashboardSummary(): Promise<ApiResponse<DashboardSummary>> {
+export async function getDashboardSummary(
+  startDate?: Date,
+  endDate?: Date
+): Promise<ApiResponse<DashboardSummary>> {
   try {
     const now = new Date()
-    const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
-    const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
+    const monthStart = format(startDate ? startOfMonth(startDate) : startOfMonth(now), 'yyyy-MM-dd')
+    const monthEnd = format(endDate ? endOfMonth(endDate) : endOfMonth(now), 'yyyy-MM-dd')
 
     // 現場数取得
     const { count: totalFields, error: fieldsError } = await supabase
@@ -31,7 +36,7 @@ export async function getDashboardSummary(): Promise<ApiResponse<DashboardSummar
       return { data: null, error: projectsError.message, status: 400 }
     }
 
-    // 今月の案件取得（売上・人件費）
+    // 期間内の案件取得（売上・人件費）
     const { data: monthlyProjects, error: monthlyProjectsError } = await supabase
       .from('projects')
       .select('invoice_amount, labor_cost')
@@ -43,7 +48,7 @@ export async function getDashboardSummary(): Promise<ApiResponse<DashboardSummar
       return { data: null, error: monthlyProjectsError.message, status: 400 }
     }
 
-    // 今月の経費取得
+    // 期間内の経費取得
     const { data: monthlyExpenses, error: expensesError } = await supabase
       .from('expenses')
       .select('amount')
@@ -91,15 +96,26 @@ export async function getDashboardSummary(): Promise<ApiResponse<DashboardSummar
 }
 
 /**
- * 月別集計取得（過去N ヶ月）
+ * 月別集計取得
+ * @param startDate 開始月（デフォルト: 6ヶ月前）
+ * @param endDate 終了月（デフォルト: 今月）
  */
-export async function getMonthlyStats(months: number = 6): Promise<ApiResponse<MonthlyStats[]>> {
+export async function getMonthlyStats(
+  startDate?: Date,
+  endDate?: Date
+): Promise<ApiResponse<MonthlyStats[]>> {
   try {
     const now = new Date()
+    const effectiveEndDate = endDate || now
+    const effectiveStartDate = startDate || subMonths(now, 5)
     const stats: MonthlyStats[] = []
 
-    for (let i = months - 1; i >= 0; i--) {
-      const targetMonth = subMonths(now, i)
+    // 開始月から終了月までループ
+    let currentMonth = startOfMonth(effectiveStartDate)
+    const lastMonth = startOfMonth(effectiveEndDate)
+
+    while (currentMonth <= lastMonth) {
+      const targetMonth = currentMonth
       const monthStart = format(startOfMonth(targetMonth), 'yyyy-MM-dd')
       const monthEnd = format(endOfMonth(targetMonth), 'yyyy-MM-dd')
       const monthKey = format(targetMonth, 'yyyy-MM')
@@ -128,6 +144,9 @@ export async function getMonthlyStats(months: number = 6): Promise<ApiResponse<M
         expense,
         laborCost,
       })
+
+      // 次の月へ
+      currentMonth = addMonths(currentMonth, 1)
     }
 
     return { data: stats, error: null, status: 200 }
@@ -142,15 +161,20 @@ export async function getMonthlyStats(months: number = 6): Promise<ApiResponse<M
 }
 
 /**
- * 従業員稼働サマリー取得（今月）
+ * 従業員稼働サマリー取得
+ * @param startDate 開始日（デフォルト: 今月1日）
+ * @param endDate 終了日（デフォルト: 今月末日）
  */
-export async function getEmployeeWorkSummary(): Promise<ApiResponse<EmployeeWorkSummary[]>> {
+export async function getEmployeeWorkSummary(
+  startDate?: Date,
+  endDate?: Date
+): Promise<ApiResponse<EmployeeWorkSummary[]>> {
   try {
     const now = new Date()
-    const monthStart = format(startOfMonth(now), 'yyyy-MM-dd')
-    const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd')
+    const monthStart = format(startDate ? startOfMonth(startDate) : startOfMonth(now), 'yyyy-MM-dd')
+    const monthEnd = format(endDate ? endOfMonth(endDate) : endOfMonth(now), 'yyyy-MM-dd')
 
-    // 今月の作業日を取得
+    // 期間内の作業日を取得
     const { data: workDays, error: workDaysError } = await supabase
       .from('work_days')
       .select('id')
@@ -208,10 +232,17 @@ export async function getEmployeeWorkSummary(): Promise<ApiResponse<EmployeeWork
 
 /**
  * 直近案件取得
+ * @param limit 取得件数（デフォルト: 5）
+ * @param startDate 開始日（指定時は期間内の案件のみ）
+ * @param endDate 終了日（指定時は期間内の案件のみ）
  */
-export async function getRecentProjects(limit: number = 5): Promise<ApiResponse<RecentProject[]>> {
+export async function getRecentProjects(
+  limit: number = 5,
+  startDate?: Date,
+  endDate?: Date
+): Promise<ApiResponse<RecentProject[]>> {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('projects')
       .select(`
         id,
@@ -219,6 +250,18 @@ export async function getRecentProjects(limit: number = 5): Promise<ApiResponse<
         invoice_amount,
         fields (field_name)
       `)
+
+    // 期間指定がある場合はフィルタリング
+    if (startDate) {
+      const start = format(startOfMonth(startDate), 'yyyy-MM-dd')
+      query = query.gte('implementation_date', start)
+    }
+    if (endDate) {
+      const end = format(endOfMonth(endDate), 'yyyy-MM-dd')
+      query = query.lte('implementation_date', end)
+    }
+
+    const { data, error } = await query
       .order('implementation_date', { ascending: false })
       .limit(limit)
 

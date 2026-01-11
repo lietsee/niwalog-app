@@ -3,13 +3,14 @@ import type { EmployeeWorkSummary } from '@/lib/types'
 
 interface EmployeeHoursTableProps {
   data: EmployeeWorkSummary[]
+  title?: string
 }
 
-export function EmployeeHoursTable({ data }: EmployeeHoursTableProps) {
+export function EmployeeHoursTable({ data, title = '今月の従業員稼働' }: EmployeeHoursTableProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>今月の従業員稼働</CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (

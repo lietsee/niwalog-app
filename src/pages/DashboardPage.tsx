@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { MapPin, Briefcase, TrendingUp, Receipt, Users, BarChart3, History } from 'lucide-react'
+import { MapPin, Briefcase, TrendingUp, Receipt, Users, BarChart3, History, ChevronLeft, ChevronRight } from 'lucide-react'
+import { format, subMonths, addMonths } from 'date-fns'
+import { ja } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
 import { StatCard } from '@/components/StatCard'
 import { MonthlyChart } from '@/components/MonthlyChart'
@@ -13,6 +15,8 @@ import {
   getEmployeeWorkSummary,
 } from '@/lib/dashboardApi'
 import type { DashboardSummary, MonthlyStats, RecentProject, EmployeeWorkSummary } from '@/lib/types'
+
+type PeriodMode = 'single' | 'range'
 
 interface DashboardPageProps {
   onNavigate: (page: 'field-list' | 'analysis' | 'history') => void
@@ -32,19 +36,25 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [employeeHours, setEmployeeHours] = useState<EmployeeWorkSummary[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    loadDashboardData()
-  }, [])
+  // 期間選択の状態
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('single')
+  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date())
+  const [startMonth, setStartMonth] = useState<Date>(subMonths(new Date(), 2))
+  const [endMonth, setEndMonth] = useState<Date>(new Date())
 
-  const loadDashboardData = async () => {
+  // 現在の期間を計算
+  const currentStartDate = periodMode === 'single' ? selectedMonth : startMonth
+  const currentEndDate = periodMode === 'single' ? selectedMonth : endMonth
+
+  const loadDashboardData = useCallback(async () => {
     setLoading(true)
 
     // 並列でデータ取得
     const [summaryResult, statsResult, projectsResult, employeeResult] = await Promise.all([
-      getDashboardSummary(),
-      getMonthlyStats(6),
-      getRecentProjects(5),
-      getEmployeeWorkSummary(),
+      getDashboardSummary(currentStartDate, currentEndDate),
+      getMonthlyStats(currentStartDate, currentEndDate),
+      getRecentProjects(5, currentStartDate, currentEndDate),
+      getEmployeeWorkSummary(currentStartDate, currentEndDate),
     ])
 
     if (summaryResult.error) {
@@ -72,6 +82,56 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     }
 
     setLoading(false)
+  }, [currentStartDate, currentEndDate])
+
+  useEffect(() => {
+    loadDashboardData()
+  }, [loadDashboardData])
+
+  // 期間ラベルを生成
+  const getPeriodLabel = () => {
+    if (periodMode === 'single') {
+      return format(selectedMonth, 'yyyy年M月', { locale: ja })
+    } else {
+      const start = format(startMonth, 'yyyy/MM', { locale: ja })
+      const end = format(endMonth, 'yyyy/MM', { locale: ja })
+      return `${start} 〜 ${end}`
+    }
+  }
+
+  // 月を移動
+  const handlePrevMonth = () => {
+    if (periodMode === 'single') {
+      setSelectedMonth(subMonths(selectedMonth, 1))
+    }
+  }
+
+  const handleNextMonth = () => {
+    if (periodMode === 'single') {
+      setSelectedMonth(addMonths(selectedMonth, 1))
+    }
+  }
+
+  // 月選択のハンドラ
+  const handleMonthChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'single' | 'start' | 'end') => {
+    const value = e.target.value
+    if (!value) return
+    const date = new Date(value + '-01')
+    if (type === 'single') {
+      setSelectedMonth(date)
+    } else if (type === 'start') {
+      setStartMonth(date)
+      // 開始月が終了月より後の場合、終了月を開始月に合わせる
+      if (date > endMonth) {
+        setEndMonth(date)
+      }
+    } else {
+      setEndMonth(date)
+      // 終了月が開始月より前の場合、開始月を終了月に合わせる
+      if (date < startMonth) {
+        setStartMonth(date)
+      }
+    }
   }
 
   if (loading) {
@@ -107,6 +167,70 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           </div>
         </div>
 
+        {/* 期間選択 */}
+        <div className="bg-white rounded-lg border p-4 mb-6">
+          <div className="flex flex-wrap items-center gap-4">
+            <span className="text-sm font-medium text-muted-foreground">表示期間:</span>
+            <div className="flex gap-1">
+              <Button
+                variant={periodMode === 'single' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setPeriodMode('single')}
+              >
+                単月
+              </Button>
+              <Button
+                variant={periodMode === 'range' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setPeriodMode('range')}
+              >
+                期間
+              </Button>
+            </div>
+
+            {periodMode === 'single' ? (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={handlePrevMonth}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <input
+                  type="month"
+                  value={format(selectedMonth, 'yyyy-MM')}
+                  onChange={(e) => handleMonthChange(e, 'single')}
+                  className="px-3 py-1.5 border rounded-md text-sm"
+                />
+                <Button variant="outline" size="icon" onClick={handleNextMonth}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedMonth(new Date())}
+                  className="text-muted-foreground"
+                >
+                  今月
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="month"
+                  value={format(startMonth, 'yyyy-MM')}
+                  onChange={(e) => handleMonthChange(e, 'start')}
+                  className="px-3 py-1.5 border rounded-md text-sm"
+                />
+                <span className="text-muted-foreground">〜</span>
+                <input
+                  type="month"
+                  value={format(endMonth, 'yyyy-MM')}
+                  onChange={(e) => handleMonthChange(e, 'end')}
+                  className="px-3 py-1.5 border rounded-md text-sm"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* サマリーカード */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <StatCard
@@ -120,17 +244,17 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             icon={Briefcase}
           />
           <StatCard
-            title="今月売上"
+            title={`${getPeriodLabel()}売上`}
             value={formatCurrency(summary?.monthlyInvoice || 0)}
             icon={TrendingUp}
           />
           <StatCard
-            title="今月経費"
+            title={`${getPeriodLabel()}経費`}
             value={formatCurrency(summary?.monthlyExpense || 0)}
             icon={Receipt}
           />
           <StatCard
-            title="今月人件費"
+            title={`${getPeriodLabel()}人件費`}
             value={formatCurrency(summary?.monthlyLaborCost || 0)}
             icon={Users}
           />
@@ -143,7 +267,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </div>
 
         {/* 従業員稼働 */}
-        <EmployeeHoursTable data={employeeHours} />
+        <EmployeeHoursTable data={employeeHours} title={`${getPeriodLabel()}の従業員稼働`} />
       </div>
     </div>
   )
