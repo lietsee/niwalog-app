@@ -150,6 +150,26 @@ VALUES
   ('NG-0003', '長久手緑地', '長久手市役所', '愛知県長久手市岩作三ヶ峯1-1', true, true, true, NULL, 12.5, 30, 1200, 'トイレ利用可能', '傾斜地多し', '<上記で取得したID>');
 ```
 
+**重要: テストデータのUUIDについて**
+
+テストデータでUUIDカラム（id, field_id, project_id等）に値を指定する場合、**必ず`gen_random_uuid()`を使用**してください。
+
+```sql
+-- NG: 手動で作成した偽UUID（RFC 4122に準拠していない）
+INSERT INTO fields (id, ...) VALUES ('11111111-1111-1111-1111-111111111111', ...);
+
+-- OK: gen_random_uuid()を使用
+INSERT INTO fields (id, ...) VALUES (gen_random_uuid(), ...);
+
+-- OK: idを省略（デフォルトでgen_random_uuid()が使用される）
+INSERT INTO fields (field_code, ...) VALUES ('F001', ...);
+```
+
+**なぜ手動UUIDはダメなのか:**
+- `11111111-1111-1111-1111-111111111111`のようなUUIDは、RFC 4122のバージョンビット（位置3の文字）が不正
+- ZodのUUID検証（`z.string().uuid()`）がRFC 4122準拠をチェックするため、フォームバリデーションで失敗する
+- エラー例: `{message: '現場IDが無効です', type: 'invalid_format'}`
+
 #### 7. 開発サーバー起動
 
 ```bash
@@ -1108,6 +1128,29 @@ SELECT id, field_code, created_by FROM fields;
 - `tailwind.config.js`でCSS変数設定済み
 
 問題が発生した場合は、`package.json`でTailwind CSSのバージョンを確認してください。
+
+### フォーム更新ボタンが反応しない
+
+**症状:** 案件編集画面などで「更新」ボタンをクリックしても何も起きない（エラーも出ない）
+
+**原因:** テストデータのUUIDがRFC 4122に準拠していない可能性があります。
+
+**確認方法:**
+1. ブラウザの開発者ツール（F12）を開く
+2. フォームのonSubmitにconsole.logを追加して`errors`を確認
+3. `field_id`などのUUIDフィールドで`invalid_format`エラーが出ている場合、UUIDが原因
+
+**解決方法:**
+1. テストデータを削除
+2. `gen_random_uuid()`を使用してデータを再作成
+
+```sql
+-- 正しいUUIDでテストデータを作成
+INSERT INTO fields (id, field_code, field_name, ...) VALUES
+  (gen_random_uuid(), 'F001', 'テスト現場A', ...);
+```
+
+詳細は「6. サンプルデータ投入」の「テストデータのUUIDについて」を参照。
 
 ---
 

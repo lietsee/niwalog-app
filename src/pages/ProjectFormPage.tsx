@@ -60,6 +60,7 @@ export function ProjectFormPage({
     watch,
   } = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema) as never,
+    mode: 'onBlur',
     defaultValues: {
       field_id: fieldId,
       project_number: 1,
@@ -107,9 +108,9 @@ export function ProjectFormPage({
         toast.error(`案件情報の取得に失敗しました: ${projectResult.error}`)
       } else if (projectResult.data) {
         const data = projectResult.data
-        setValue('field_id', data.field_id)
-        setValue('project_number', data.project_number)
-        setValue('implementation_date', data.implementation_date)
+        setValue('field_id', data.field_id, { shouldValidate: true })
+        setValue('project_number', data.project_number, { shouldValidate: true })
+        setValue('implementation_date', data.implementation_date, { shouldValidate: true })
         setValue('work_type_pruning', data.work_type_pruning)
         setValue('work_type_weeding', data.work_type_weeding)
         setValue('work_type_cleaning', data.work_type_cleaning)
