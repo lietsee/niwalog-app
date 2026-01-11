@@ -1,0 +1,1481 @@
+
+
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+
+CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA "extensions";
+
+
+
+
+
+
+COMMENT ON SCHEMA "public" IS 'standard public schema';
+
+
+
+CREATE EXTENSION IF NOT EXISTS "pg_graphql" WITH SCHEMA "graphql";
+
+
+
+
+
+
+CREATE EXTENSION IF NOT EXISTS "pg_stat_statements" WITH SCHEMA "extensions";
+
+
+
+
+
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
+
+
+
+
+
+
+CREATE EXTENSION IF NOT EXISTS "supabase_vault" WITH SCHEMA "vault";
+
+
+
+
+
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
+
+
+
+
+
+
+CREATE OR REPLACE FUNCTION "public"."archive_expenses_to_history"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    INSERT INTO expenses_history (
+      id, project_id, expense_item, amount, notes, expense_date,
+      created_at, updated_at,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.project_id, OLD.expense_item, OLD.amount, OLD.notes, OLD.expense_date,
+      OLD.created_at, OLD.updated_at,
+      'DELETE', auth.uid()
+    );
+    RETURN OLD;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO expenses_history (
+      id, project_id, expense_item, amount, notes, expense_date,
+      created_at, updated_at,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.project_id, OLD.expense_item, OLD.amount, OLD.notes, OLD.expense_date,
+      OLD.created_at, OLD.updated_at,
+      'UPDATE', auth.uid()
+    );
+    RETURN NEW;
+  END IF;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."archive_expenses_to_history"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."archive_fields_to_history"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    INSERT INTO fields_history (
+      id, field_code, field_name, customer_name, address,
+      has_electricity, has_water, has_toilet, toilet_distance,
+      travel_distance_km, travel_time_minutes, travel_cost,
+      notes, warnings, created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.field_code, OLD.field_name, OLD.customer_name, OLD.address,
+      OLD.has_electricity, OLD.has_water, OLD.has_toilet, OLD.toilet_distance,
+      OLD.travel_distance_km, OLD.travel_time_minutes, OLD.travel_cost,
+      OLD.notes, OLD.warnings, OLD.created_at, OLD.updated_at, OLD.created_by,
+      'DELETE', auth.uid()
+    );
+    RETURN OLD;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO fields_history (
+      id, field_code, field_name, customer_name, address,
+      has_electricity, has_water, has_toilet, toilet_distance,
+      travel_distance_km, travel_time_minutes, travel_cost,
+      notes, warnings, created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.field_code, OLD.field_name, OLD.customer_name, OLD.address,
+      OLD.has_electricity, OLD.has_water, OLD.has_toilet, OLD.toilet_distance,
+      OLD.travel_distance_km, OLD.travel_time_minutes, OLD.travel_cost,
+      OLD.notes, OLD.warnings, OLD.created_at, OLD.updated_at, OLD.created_by,
+      'UPDATE', auth.uid()
+    );
+    RETURN NEW;
+  END IF;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."archive_fields_to_history"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."archive_projects_to_history"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    INSERT INTO projects_history (
+      id, field_id, project_number, implementation_date,
+      work_type_pruning, work_type_weeding, work_type_cleaning, work_type_other,
+      estimate_amount, invoice_amount, labor_cost, expense_total,
+      review_good_points, review_improvements, review_next_actions,
+      created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.field_id, OLD.project_number, OLD.implementation_date,
+      OLD.work_type_pruning, OLD.work_type_weeding, OLD.work_type_cleaning, OLD.work_type_other,
+      OLD.estimate_amount, OLD.invoice_amount, OLD.labor_cost, OLD.expense_total,
+      OLD.review_good_points, OLD.review_improvements, OLD.review_next_actions,
+      OLD.created_at, OLD.updated_at, OLD.created_by,
+      'DELETE', auth.uid()
+    );
+    RETURN OLD;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO projects_history (
+      id, field_id, project_number, implementation_date,
+      work_type_pruning, work_type_weeding, work_type_cleaning, work_type_other,
+      estimate_amount, invoice_amount, labor_cost, expense_total,
+      review_good_points, review_improvements, review_next_actions,
+      created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.field_id, OLD.project_number, OLD.implementation_date,
+      OLD.work_type_pruning, OLD.work_type_weeding, OLD.work_type_cleaning, OLD.work_type_other,
+      OLD.estimate_amount, OLD.invoice_amount, OLD.labor_cost, OLD.expense_total,
+      OLD.review_good_points, OLD.review_improvements, OLD.review_next_actions,
+      OLD.created_at, OLD.updated_at, OLD.created_by,
+      'UPDATE', auth.uid()
+    );
+    RETURN NEW;
+  END IF;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."archive_projects_to_history"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."archive_work_days_to_history"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    INSERT INTO work_days_history (
+      id, project_id, work_date, day_number, weather,
+      work_description, troubles, created_at, updated_at,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.project_id, OLD.work_date, OLD.day_number, OLD.weather,
+      OLD.work_description, OLD.troubles, OLD.created_at, OLD.updated_at,
+      'DELETE', auth.uid()
+    );
+    RETURN OLD;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO work_days_history (
+      id, project_id, work_date, day_number, weather,
+      work_description, troubles, created_at, updated_at,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.project_id, OLD.work_date, OLD.day_number, OLD.weather,
+      OLD.work_description, OLD.troubles, OLD.created_at, OLD.updated_at,
+      'UPDATE', auth.uid()
+    );
+    RETURN NEW;
+  END IF;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."archive_work_days_to_history"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."archive_work_records_to_history"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    INSERT INTO work_records_history (
+      id, work_day_id, employee_code,
+      clock_in, site_arrival, site_departure, clock_out,
+      break_minutes, site_hours, prep_hours, return_hours, total_hours,
+      created_at, updated_at,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.work_day_id, OLD.employee_code,
+      OLD.clock_in, OLD.site_arrival, OLD.site_departure, OLD.clock_out,
+      OLD.break_minutes, OLD.site_hours, OLD.prep_hours, OLD.return_hours, OLD.total_hours,
+      OLD.created_at, OLD.updated_at,
+      'DELETE', auth.uid()
+    );
+    RETURN OLD;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO work_records_history (
+      id, work_day_id, employee_code,
+      clock_in, site_arrival, site_departure, clock_out,
+      break_minutes, site_hours, prep_hours, return_hours, total_hours,
+      created_at, updated_at,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.work_day_id, OLD.employee_code,
+      OLD.clock_in, OLD.site_arrival, OLD.site_departure, OLD.clock_out,
+      OLD.break_minutes, OLD.site_hours, OLD.prep_hours, OLD.return_hours, OLD.total_hours,
+      OLD.created_at, OLD.updated_at,
+      'UPDATE', auth.uid()
+    );
+    RETURN NEW;
+  END IF;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."archive_work_records_to_history"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."calculate_working_hours"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  -- 現場作業時間 = 撤収 - 到着 - 休憩
+  NEW.site_hours := (EXTRACT(EPOCH FROM (NEW.site_departure - NEW.site_arrival)) / 3600)
+                    - (COALESCE(NEW.break_minutes, 60) / 60.0);
+
+  -- 準備＋移動時間（clock_inがある場合のみ）
+  IF NEW.clock_in IS NOT NULL AND NEW.site_arrival IS NOT NULL THEN
+    NEW.prep_hours := EXTRACT(EPOCH FROM (NEW.site_arrival - NEW.clock_in)) / 3600;
+  ELSE
+    NEW.prep_hours := NULL;
+  END IF;
+
+  -- 帰社時間（clock_outがある場合のみ）
+  IF NEW.site_departure IS NOT NULL AND NEW.clock_out IS NOT NULL THEN
+    NEW.return_hours := EXTRACT(EPOCH FROM (NEW.clock_out - NEW.site_departure)) / 3600;
+  ELSE
+    NEW.return_hours := NULL;
+  END IF;
+
+  -- 総拘束時間（両方ある場合のみ）
+  IF NEW.clock_in IS NOT NULL AND NEW.clock_out IS NOT NULL THEN
+    NEW.total_hours := EXTRACT(EPOCH FROM (NEW.clock_out - NEW.clock_in)) / 3600;
+  ELSE
+    NEW.total_hours := NULL;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."calculate_working_hours"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."update_updated_at_column"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."update_updated_at_column"() OWNER TO "postgres";
+
+SET default_tablespace = '';
+
+SET default_table_access_method = "heap";
+
+
+CREATE TABLE IF NOT EXISTS "public"."expenses" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "project_id" "uuid" NOT NULL,
+    "expense_item" character varying(255) NOT NULL,
+    "amount" integer NOT NULL,
+    "notes" "text",
+    "expense_date" "date",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."expenses" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."expenses" IS '経費: 案件固有でかかった経費（クレーン、消耗品、外注など）';
+
+
+
+COMMENT ON COLUMN "public"."expenses"."expense_date" IS '経費が発生した日（work_daysと紐付け可能）';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."expenses_history" (
+    "history_id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "id" "uuid" NOT NULL,
+    "project_id" "uuid" NOT NULL,
+    "expense_item" character varying(255) NOT NULL,
+    "amount" integer NOT NULL,
+    "notes" "text",
+    "expense_date" "date",
+    "created_at" timestamp with time zone,
+    "updated_at" timestamp with time zone,
+    "operation_type" character varying(10) NOT NULL,
+    "operation_at" timestamp with time zone DEFAULT "now"(),
+    "operation_by" "uuid",
+    "reason" "text"
+);
+
+
+ALTER TABLE "public"."expenses_history" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."expenses_history" IS '経費履歴: 削除・更新された経費情報を保管';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."fields" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "field_code" character varying(50) NOT NULL,
+    "field_name" character varying(255) NOT NULL,
+    "customer_name" character varying(255),
+    "address" "text",
+    "has_electricity" boolean DEFAULT false,
+    "has_water" boolean DEFAULT false,
+    "has_toilet" boolean DEFAULT false,
+    "toilet_distance" character varying(100),
+    "travel_distance_km" numeric(10,2),
+    "travel_time_minutes" integer,
+    "travel_cost" integer,
+    "notes" "text",
+    "warnings" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."fields" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."fields" IS '現場マスタ: 現場の基本情報と環境情報を管理（アクティブなレコードのみ）';
+
+
+
+COMMENT ON COLUMN "public"."fields"."field_code" IS '現場コード（例: KT-0001, NG-0007）';
+
+
+
+COMMENT ON COLUMN "public"."fields"."travel_cost" IS 'ガソリン代・ETC等を含む往復移動費';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."fields_history" (
+    "history_id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "id" "uuid" NOT NULL,
+    "field_code" character varying(50) NOT NULL,
+    "field_name" character varying(255) NOT NULL,
+    "customer_name" character varying(255),
+    "address" "text",
+    "has_electricity" boolean,
+    "has_water" boolean,
+    "has_toilet" boolean,
+    "toilet_distance" character varying(100),
+    "travel_distance_km" numeric(10,2),
+    "travel_time_minutes" integer,
+    "travel_cost" integer,
+    "notes" "text",
+    "warnings" "text",
+    "created_at" timestamp with time zone,
+    "updated_at" timestamp with time zone,
+    "created_by" "uuid",
+    "operation_type" character varying(10) NOT NULL,
+    "operation_at" timestamp with time zone DEFAULT "now"(),
+    "operation_by" "uuid",
+    "reason" "text"
+);
+
+
+ALTER TABLE "public"."fields_history" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."fields_history" IS '現場マスタ履歴: 削除・更新された現場情報を保管';
+
+
+
+COMMENT ON COLUMN "public"."fields_history"."operation_type" IS '操作種別: UPDATE（更新前の状態）, DELETE（削除されたレコード）';
+
+
+
+CREATE OR REPLACE VIEW "public"."fields_full_history" AS
+ SELECT "fields"."id",
+    "fields"."field_code",
+    "fields"."field_name",
+    "fields"."customer_name",
+    "fields"."address",
+    "fields"."has_electricity",
+    "fields"."has_water",
+    "fields"."has_toilet",
+    "fields"."toilet_distance",
+    "fields"."travel_distance_km",
+    "fields"."travel_time_minutes",
+    "fields"."travel_cost",
+    "fields"."notes",
+    "fields"."warnings",
+    "fields"."created_at",
+    "fields"."updated_at",
+    "fields"."created_by",
+    'CURRENT'::character varying AS "status",
+    "fields"."updated_at" AS "valid_from",
+    NULL::timestamp with time zone AS "valid_to",
+    NULL::"uuid" AS "operation_by"
+   FROM "public"."fields"
+UNION ALL
+ SELECT "fields_history"."id",
+    "fields_history"."field_code",
+    "fields_history"."field_name",
+    "fields_history"."customer_name",
+    "fields_history"."address",
+    "fields_history"."has_electricity",
+    "fields_history"."has_water",
+    "fields_history"."has_toilet",
+    "fields_history"."toilet_distance",
+    "fields_history"."travel_distance_km",
+    "fields_history"."travel_time_minutes",
+    "fields_history"."travel_cost",
+    "fields_history"."notes",
+    "fields_history"."warnings",
+    "fields_history"."created_at",
+    "fields_history"."updated_at",
+    "fields_history"."created_by",
+    "fields_history"."operation_type" AS "status",
+    "fields_history"."updated_at" AS "valid_from",
+    "fields_history"."operation_at" AS "valid_to",
+    "fields_history"."operation_by"
+   FROM "public"."fields_history"
+  ORDER BY 1, 19 DESC;
+
+
+ALTER VIEW "public"."fields_full_history" OWNER TO "postgres";
+
+
+COMMENT ON VIEW "public"."fields_full_history" IS '現場の完全な履歴ビュー: 現在のレコードと過去の履歴を統合して表示';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."projects" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "field_id" "uuid" NOT NULL,
+    "project_number" integer NOT NULL,
+    "implementation_date" "date" NOT NULL,
+    "work_type_pruning" boolean DEFAULT false,
+    "work_type_weeding" boolean DEFAULT false,
+    "work_type_cleaning" boolean DEFAULT false,
+    "work_type_other" character varying(255),
+    "estimate_amount" integer,
+    "invoice_amount" integer,
+    "labor_cost" integer,
+    "expense_total" integer,
+    "review_good_points" "text",
+    "review_improvements" "text",
+    "review_next_actions" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"(),
+    "created_by" "uuid"
+);
+
+
+ALTER TABLE "public"."projects" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."projects" IS '案件: 1つの現場で複数回実施する作業を案件として管理';
+
+
+
+COMMENT ON COLUMN "public"."projects"."project_number" IS '現場内での案件番号（#1, #2, #3...）';
+
+
+
+COMMENT ON COLUMN "public"."projects"."estimate_amount" IS '見積もり金額（例年作業の場合はNULL）';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."projects_history" (
+    "history_id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "id" "uuid" NOT NULL,
+    "field_id" "uuid" NOT NULL,
+    "project_number" integer NOT NULL,
+    "implementation_date" "date" NOT NULL,
+    "work_type_pruning" boolean,
+    "work_type_weeding" boolean,
+    "work_type_cleaning" boolean,
+    "work_type_other" character varying(255),
+    "estimate_amount" integer,
+    "invoice_amount" integer,
+    "labor_cost" integer,
+    "expense_total" integer,
+    "review_good_points" "text",
+    "review_improvements" "text",
+    "review_next_actions" "text",
+    "created_at" timestamp with time zone,
+    "updated_at" timestamp with time zone,
+    "created_by" "uuid",
+    "operation_type" character varying(10) NOT NULL,
+    "operation_at" timestamp with time zone DEFAULT "now"(),
+    "operation_by" "uuid",
+    "reason" "text"
+);
+
+
+ALTER TABLE "public"."projects_history" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."projects_history" IS '案件履歴: 削除・更新された案件情報を保管';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."work_days" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "project_id" "uuid" NOT NULL,
+    "work_date" "date" NOT NULL,
+    "day_number" integer NOT NULL,
+    "weather" "jsonb",
+    "work_description" "text",
+    "troubles" "text",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."work_days" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."work_days" IS '日別作業記録: 1つの案件を複数日に分けて作業する場合の日別記録';
+
+
+
+COMMENT ON COLUMN "public"."work_days"."weather" IS 'JSONB配列で時刻ごとの天候を記録';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."work_days_history" (
+    "history_id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "id" "uuid" NOT NULL,
+    "project_id" "uuid" NOT NULL,
+    "work_date" "date" NOT NULL,
+    "day_number" integer NOT NULL,
+    "weather" "jsonb",
+    "work_description" "text",
+    "troubles" "text",
+    "created_at" timestamp with time zone,
+    "updated_at" timestamp with time zone,
+    "operation_type" character varying(10) NOT NULL,
+    "operation_at" timestamp with time zone DEFAULT "now"(),
+    "operation_by" "uuid",
+    "reason" "text"
+);
+
+
+ALTER TABLE "public"."work_days_history" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."work_days_history" IS '日別作業記録履歴: 削除・更新された作業日情報を保管';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."work_records" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "work_day_id" "uuid" NOT NULL,
+    "employee_code" character varying(10) NOT NULL,
+    "clock_in" time without time zone,
+    "site_arrival" time without time zone NOT NULL,
+    "site_departure" time without time zone NOT NULL,
+    "clock_out" time without time zone,
+    "break_minutes" integer DEFAULT 60,
+    "site_hours" numeric(5,2),
+    "prep_hours" numeric(5,2),
+    "return_hours" numeric(5,2),
+    "total_hours" numeric(5,2),
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "updated_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."work_records" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."work_records" IS '従事者稼働記録: 日別・従業員別の稼働時間を記録（4時刻対応）';
+
+
+
+COMMENT ON COLUMN "public"."work_records"."employee_code" IS '従業員番号（既存のSupabase DBの従業員マスタと連携予定）';
+
+
+
+COMMENT ON COLUMN "public"."work_records"."clock_in" IS '出勤時間（土場）。途中合流の場合はNULL';
+
+
+
+COMMENT ON COLUMN "public"."work_records"."site_arrival" IS '現場到着時間（必須）';
+
+
+
+COMMENT ON COLUMN "public"."work_records"."site_departure" IS '現場撤収時間（必須）';
+
+
+
+COMMENT ON COLUMN "public"."work_records"."clock_out" IS '退勤時間（土場）。途中離脱の場合はNULL';
+
+
+
+COMMENT ON COLUMN "public"."work_records"."site_hours" IS '現場作業時間=撤収-到着-休憩（自動計算）';
+
+
+
+COMMENT ON COLUMN "public"."work_records"."prep_hours" IS '準備＋移動時間=到着-出勤（自動計算、出勤がある場合のみ）';
+
+
+
+COMMENT ON COLUMN "public"."work_records"."return_hours" IS '帰社時間=退勤-撤収（自動計算、退勤がある場合のみ）';
+
+
+
+COMMENT ON COLUMN "public"."work_records"."total_hours" IS '総拘束時間=退勤-出勤（自動計算、両方ある場合のみ）';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."work_records_history" (
+    "history_id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "id" "uuid" NOT NULL,
+    "work_day_id" "uuid" NOT NULL,
+    "employee_code" character varying(10) NOT NULL,
+    "clock_in" time without time zone,
+    "site_arrival" time without time zone NOT NULL,
+    "site_departure" time without time zone NOT NULL,
+    "clock_out" time without time zone,
+    "break_minutes" integer,
+    "site_hours" numeric(5,2),
+    "prep_hours" numeric(5,2),
+    "return_hours" numeric(5,2),
+    "total_hours" numeric(5,2),
+    "created_at" timestamp with time zone,
+    "updated_at" timestamp with time zone,
+    "operation_type" character varying(10) NOT NULL,
+    "operation_at" timestamp with time zone DEFAULT "now"(),
+    "operation_by" "uuid",
+    "reason" "text"
+);
+
+
+ALTER TABLE "public"."work_records_history" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."work_records_history" IS '従事者稼働記録履歴: 削除・更新された稼働記録を保管（4時刻対応）';
+
+
+
+ALTER TABLE ONLY "public"."expenses_history"
+    ADD CONSTRAINT "expenses_history_pkey" PRIMARY KEY ("history_id");
+
+
+
+ALTER TABLE ONLY "public"."expenses"
+    ADD CONSTRAINT "expenses_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."fields"
+    ADD CONSTRAINT "fields_field_code_key" UNIQUE ("field_code");
+
+
+
+ALTER TABLE ONLY "public"."fields_history"
+    ADD CONSTRAINT "fields_history_pkey" PRIMARY KEY ("history_id");
+
+
+
+ALTER TABLE ONLY "public"."fields"
+    ADD CONSTRAINT "fields_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."projects"
+    ADD CONSTRAINT "projects_field_id_project_number_key" UNIQUE ("field_id", "project_number");
+
+
+
+ALTER TABLE ONLY "public"."projects_history"
+    ADD CONSTRAINT "projects_history_pkey" PRIMARY KEY ("history_id");
+
+
+
+ALTER TABLE ONLY "public"."projects"
+    ADD CONSTRAINT "projects_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."work_days_history"
+    ADD CONSTRAINT "work_days_history_pkey" PRIMARY KEY ("history_id");
+
+
+
+ALTER TABLE ONLY "public"."work_days"
+    ADD CONSTRAINT "work_days_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."work_days"
+    ADD CONSTRAINT "work_days_project_id_day_number_key" UNIQUE ("project_id", "day_number");
+
+
+
+ALTER TABLE ONLY "public"."work_records_history"
+    ADD CONSTRAINT "work_records_history_pkey" PRIMARY KEY ("history_id");
+
+
+
+ALTER TABLE ONLY "public"."work_records"
+    ADD CONSTRAINT "work_records_pkey" PRIMARY KEY ("id");
+
+
+
+CREATE INDEX "idx_expenses_history_id" ON "public"."expenses_history" USING "btree" ("id");
+
+
+
+CREATE INDEX "idx_expenses_history_operation_at" ON "public"."expenses_history" USING "btree" ("operation_at" DESC);
+
+
+
+CREATE INDEX "idx_expenses_history_project" ON "public"."expenses_history" USING "btree" ("project_id");
+
+
+
+CREATE INDEX "idx_expenses_project" ON "public"."expenses" USING "btree" ("project_id");
+
+
+
+CREATE INDEX "idx_fields_code" ON "public"."fields" USING "btree" ("field_code");
+
+
+
+CREATE INDEX "idx_fields_history_code" ON "public"."fields_history" USING "btree" ("field_code");
+
+
+
+CREATE INDEX "idx_fields_history_id" ON "public"."fields_history" USING "btree" ("id");
+
+
+
+CREATE INDEX "idx_fields_history_operation_at" ON "public"."fields_history" USING "btree" ("operation_at" DESC);
+
+
+
+CREATE INDEX "idx_fields_name" ON "public"."fields" USING "btree" ("field_name");
+
+
+
+CREATE INDEX "idx_projects_date" ON "public"."projects" USING "btree" ("implementation_date" DESC);
+
+
+
+CREATE INDEX "idx_projects_field" ON "public"."projects" USING "btree" ("field_id");
+
+
+
+CREATE INDEX "idx_projects_field_date" ON "public"."projects" USING "btree" ("field_id", "implementation_date" DESC);
+
+
+
+CREATE INDEX "idx_projects_history_field" ON "public"."projects_history" USING "btree" ("field_id");
+
+
+
+CREATE INDEX "idx_projects_history_id" ON "public"."projects_history" USING "btree" ("id");
+
+
+
+CREATE INDEX "idx_projects_history_operation_at" ON "public"."projects_history" USING "btree" ("operation_at" DESC);
+
+
+
+CREATE INDEX "idx_work_days_date" ON "public"."work_days" USING "btree" ("work_date" DESC);
+
+
+
+CREATE INDEX "idx_work_days_history_id" ON "public"."work_days_history" USING "btree" ("id");
+
+
+
+CREATE INDEX "idx_work_days_history_operation_at" ON "public"."work_days_history" USING "btree" ("operation_at" DESC);
+
+
+
+CREATE INDEX "idx_work_days_history_project" ON "public"."work_days_history" USING "btree" ("project_id");
+
+
+
+CREATE INDEX "idx_work_days_project" ON "public"."work_days" USING "btree" ("project_id");
+
+
+
+CREATE INDEX "idx_work_records_day" ON "public"."work_records" USING "btree" ("work_day_id");
+
+
+
+CREATE INDEX "idx_work_records_employee" ON "public"."work_records" USING "btree" ("employee_code");
+
+
+
+CREATE INDEX "idx_work_records_employee_day" ON "public"."work_records" USING "btree" ("employee_code", "work_day_id");
+
+
+
+CREATE INDEX "idx_work_records_history_day" ON "public"."work_records_history" USING "btree" ("work_day_id");
+
+
+
+CREATE INDEX "idx_work_records_history_employee" ON "public"."work_records_history" USING "btree" ("employee_code");
+
+
+
+CREATE INDEX "idx_work_records_history_id" ON "public"."work_records_history" USING "btree" ("id");
+
+
+
+CREATE INDEX "idx_work_records_history_operation_at" ON "public"."work_records_history" USING "btree" ("operation_at" DESC);
+
+
+
+CREATE OR REPLACE TRIGGER "trg_archive_expenses" BEFORE DELETE OR UPDATE ON "public"."expenses" FOR EACH ROW EXECUTE FUNCTION "public"."archive_expenses_to_history"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_archive_fields" BEFORE DELETE OR UPDATE ON "public"."fields" FOR EACH ROW EXECUTE FUNCTION "public"."archive_fields_to_history"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_archive_projects" BEFORE DELETE OR UPDATE ON "public"."projects" FOR EACH ROW EXECUTE FUNCTION "public"."archive_projects_to_history"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_archive_work_days" BEFORE DELETE OR UPDATE ON "public"."work_days" FOR EACH ROW EXECUTE FUNCTION "public"."archive_work_days_to_history"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_archive_work_records" BEFORE DELETE OR UPDATE ON "public"."work_records" FOR EACH ROW EXECUTE FUNCTION "public"."archive_work_records_to_history"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_calculate_working_hours" BEFORE INSERT OR UPDATE ON "public"."work_records" FOR EACH ROW EXECUTE FUNCTION "public"."calculate_working_hours"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_expenses_updated_at" BEFORE UPDATE ON "public"."expenses" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_fields_updated_at" BEFORE UPDATE ON "public"."fields" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_projects_updated_at" BEFORE UPDATE ON "public"."projects" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_work_days_updated_at" BEFORE UPDATE ON "public"."work_days" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
+CREATE OR REPLACE TRIGGER "trg_work_records_updated_at" BEFORE UPDATE ON "public"."work_records" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
+ALTER TABLE ONLY "public"."expenses_history"
+    ADD CONSTRAINT "expenses_history_operation_by_fkey" FOREIGN KEY ("operation_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."expenses"
+    ADD CONSTRAINT "expenses_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."fields"
+    ADD CONSTRAINT "fields_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."fields_history"
+    ADD CONSTRAINT "fields_history_operation_by_fkey" FOREIGN KEY ("operation_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."projects"
+    ADD CONSTRAINT "projects_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."projects"
+    ADD CONSTRAINT "projects_field_id_fkey" FOREIGN KEY ("field_id") REFERENCES "public"."fields"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."projects_history"
+    ADD CONSTRAINT "projects_history_operation_by_fkey" FOREIGN KEY ("operation_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."work_days_history"
+    ADD CONSTRAINT "work_days_history_operation_by_fkey" FOREIGN KEY ("operation_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."work_days"
+    ADD CONSTRAINT "work_days_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE RESTRICT;
+
+
+
+ALTER TABLE ONLY "public"."work_records_history"
+    ADD CONSTRAINT "work_records_history_operation_by_fkey" FOREIGN KEY ("operation_by") REFERENCES "auth"."users"("id");
+
+
+
+ALTER TABLE ONLY "public"."work_records"
+    ADD CONSTRAINT "work_records_work_day_id_fkey" FOREIGN KEY ("work_day_id") REFERENCES "public"."work_days"("id") ON DELETE RESTRICT;
+
+
+
+CREATE POLICY "Authenticated users can delete fields" ON "public"."fields" FOR DELETE USING (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+CREATE POLICY "Authenticated users can delete projects" ON "public"."projects" FOR DELETE USING (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+CREATE POLICY "Authenticated users can manage expenses" ON "public"."expenses" USING (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+CREATE POLICY "Authenticated users can manage work_days" ON "public"."work_days" USING (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+CREATE POLICY "Authenticated users can manage work_records" ON "public"."work_records" USING (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+CREATE POLICY "Authenticated users can update fields" ON "public"."fields" FOR UPDATE USING (("auth"."role"() = 'authenticated'::"text")) WITH CHECK (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+CREATE POLICY "Authenticated users can update projects" ON "public"."projects" FOR UPDATE USING (("auth"."role"() = 'authenticated'::"text")) WITH CHECK (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+CREATE POLICY "System can archive expenses history" ON "public"."expenses_history" FOR INSERT WITH CHECK (true);
+
+
+
+CREATE POLICY "System can archive fields history" ON "public"."fields_history" FOR INSERT WITH CHECK (true);
+
+
+
+CREATE POLICY "System can archive projects history" ON "public"."projects_history" FOR INSERT WITH CHECK (true);
+
+
+
+CREATE POLICY "System can archive work_days history" ON "public"."work_days_history" FOR INSERT WITH CHECK (true);
+
+
+
+CREATE POLICY "System can archive work_records history" ON "public"."work_records_history" FOR INSERT WITH CHECK (true);
+
+
+
+CREATE POLICY "Users can insert projects" ON "public"."projects" FOR INSERT WITH CHECK (("auth"."uid"() = "created_by"));
+
+
+
+CREATE POLICY "Users can insert their own fields" ON "public"."fields" FOR INSERT WITH CHECK (("auth"."uid"() = "created_by"));
+
+
+
+CREATE POLICY "Users can view all fields" ON "public"."fields" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "Users can view all projects" ON "public"."projects" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "Users can view expenses history" ON "public"."expenses_history" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "Users can view fields history" ON "public"."fields_history" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "Users can view projects history" ON "public"."projects_history" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "Users can view work_days history" ON "public"."work_days_history" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "Users can view work_records history" ON "public"."work_records_history" FOR SELECT USING (true);
+
+
+
+ALTER TABLE "public"."expenses" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."expenses_history" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."fields" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."fields_history" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."projects" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."projects_history" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."work_days" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."work_days_history" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."work_records" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."work_records_history" ENABLE ROW LEVEL SECURITY;
+
+
+
+
+ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."expenses";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."expenses_history";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."fields";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."fields_history";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."projects";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."projects_history";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."work_days";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."work_days_history";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."work_records";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."work_records_history";
+
+
+
+
+
+
+GRANT USAGE ON SCHEMA "public" TO "postgres";
+GRANT USAGE ON SCHEMA "public" TO "anon";
+GRANT USAGE ON SCHEMA "public" TO "authenticated";
+GRANT USAGE ON SCHEMA "public" TO "service_role";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+GRANT ALL ON FUNCTION "public"."archive_expenses_to_history"() TO "anon";
+GRANT ALL ON FUNCTION "public"."archive_expenses_to_history"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."archive_expenses_to_history"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."archive_fields_to_history"() TO "anon";
+GRANT ALL ON FUNCTION "public"."archive_fields_to_history"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."archive_fields_to_history"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."archive_projects_to_history"() TO "anon";
+GRANT ALL ON FUNCTION "public"."archive_projects_to_history"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."archive_projects_to_history"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."archive_work_days_to_history"() TO "anon";
+GRANT ALL ON FUNCTION "public"."archive_work_days_to_history"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."archive_work_days_to_history"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."archive_work_records_to_history"() TO "anon";
+GRANT ALL ON FUNCTION "public"."archive_work_records_to_history"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."archive_work_records_to_history"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."calculate_working_hours"() TO "anon";
+GRANT ALL ON FUNCTION "public"."calculate_working_hours"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."calculate_working_hours"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "anon";
+GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "service_role";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+GRANT ALL ON TABLE "public"."expenses" TO "anon";
+GRANT ALL ON TABLE "public"."expenses" TO "authenticated";
+GRANT ALL ON TABLE "public"."expenses" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."expenses_history" TO "anon";
+GRANT ALL ON TABLE "public"."expenses_history" TO "authenticated";
+GRANT ALL ON TABLE "public"."expenses_history" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."fields" TO "anon";
+GRANT ALL ON TABLE "public"."fields" TO "authenticated";
+GRANT ALL ON TABLE "public"."fields" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."fields_history" TO "anon";
+GRANT ALL ON TABLE "public"."fields_history" TO "authenticated";
+GRANT ALL ON TABLE "public"."fields_history" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."fields_full_history" TO "anon";
+GRANT ALL ON TABLE "public"."fields_full_history" TO "authenticated";
+GRANT ALL ON TABLE "public"."fields_full_history" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."projects" TO "anon";
+GRANT ALL ON TABLE "public"."projects" TO "authenticated";
+GRANT ALL ON TABLE "public"."projects" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."projects_history" TO "anon";
+GRANT ALL ON TABLE "public"."projects_history" TO "authenticated";
+GRANT ALL ON TABLE "public"."projects_history" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."work_days" TO "anon";
+GRANT ALL ON TABLE "public"."work_days" TO "authenticated";
+GRANT ALL ON TABLE "public"."work_days" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."work_days_history" TO "anon";
+GRANT ALL ON TABLE "public"."work_days_history" TO "authenticated";
+GRANT ALL ON TABLE "public"."work_days_history" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."work_records" TO "anon";
+GRANT ALL ON TABLE "public"."work_records" TO "authenticated";
+GRANT ALL ON TABLE "public"."work_records" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."work_records_history" TO "anon";
+GRANT ALL ON TABLE "public"."work_records_history" TO "authenticated";
+GRANT ALL ON TABLE "public"."work_records_history" TO "service_role";
+
+
+
+
+
+
+
+
+
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "postgres";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "anon";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "authenticated";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "service_role";
+
+
+
+
+
+
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "postgres";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "anon";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "authenticated";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "service_role";
+
+
+
+
+
+
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "postgres";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

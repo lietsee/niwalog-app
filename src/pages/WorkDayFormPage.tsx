@@ -99,12 +99,14 @@ export function WorkDayFormPage({
         setValue('troubles', data.troubles)
         setWeather(data.weather || [])
 
-        // 従事者稼働記録
+        // 従事者稼働記録（4時刻対応）
         const records: WorkRecordInputType[] = data.work_records.map((r: WorkRecord) => ({
           id: r.id,
           employee_code: r.employee_code,
-          start_time: r.start_time,
-          end_time: r.end_time,
+          clock_in: r.clock_in || null,
+          site_arrival: r.site_arrival,
+          site_departure: r.site_departure,
+          clock_out: r.clock_out || null,
           break_minutes: r.break_minutes ?? 60,
         }))
         setWorkRecords(records)
@@ -162,13 +164,15 @@ export function WorkDayFormPage({
         return
       }
 
-      // 従事者稼働記録を作成
+      // 従事者稼働記録を作成（4時刻対応）
       if (workRecords.length > 0) {
         const recordsToCreate = workRecords.map((r) => ({
           work_day_id: createdWorkDay.id,
           employee_code: r.employee_code,
-          start_time: r.start_time,
-          end_time: r.end_time,
+          clock_in: r.clock_in || null,
+          site_arrival: r.site_arrival,
+          site_departure: r.site_departure,
+          clock_out: r.clock_out || null,
           break_minutes: r.break_minutes ?? 60,
         }))
         const { error: recordErr } = await createWorkRecords(recordsToCreate)
@@ -190,22 +194,34 @@ export function WorkDayFormPage({
       await deleteWorkRecord(id)
     }
 
-    // 既存レコードを更新、新規レコードを作成
-    const newRecords: { work_day_id: string; employee_code: string; start_time: string; end_time: string; break_minutes: number }[] = []
+    // 既存レコードを更新、新規レコードを作成（4時刻対応）
+    const newRecords: {
+      work_day_id: string
+      employee_code: string
+      clock_in?: string | null
+      site_arrival: string
+      site_departure: string
+      clock_out?: string | null
+      break_minutes: number
+    }[] = []
     for (const record of workRecords) {
       if (record.id) {
         await updateWorkRecord(record.id, {
           employee_code: record.employee_code,
-          start_time: record.start_time,
-          end_time: record.end_time,
+          clock_in: record.clock_in || null,
+          site_arrival: record.site_arrival,
+          site_departure: record.site_departure,
+          clock_out: record.clock_out || null,
           break_minutes: record.break_minutes ?? 60,
         })
       } else {
         newRecords.push({
           work_day_id: workDayId,
           employee_code: record.employee_code,
-          start_time: record.start_time,
-          end_time: record.end_time,
+          clock_in: record.clock_in || null,
+          site_arrival: record.site_arrival,
+          site_departure: record.site_departure,
+          clock_out: record.clock_out || null,
           break_minutes: record.break_minutes ?? 60,
         })
       }

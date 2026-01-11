@@ -134,13 +134,15 @@ export function ProjectDetailPage({
       return
     }
 
-    // 従事者稼働記録を複製
+    // 従事者稼働記録を複製（4時刻対応）
     if (workDay.work_records.length > 0) {
       const recordsToCreate = workDay.work_records.map((r) => ({
         work_day_id: createdWorkDay.id,
         employee_code: r.employee_code,
-        start_time: r.start_time,
-        end_time: r.end_time,
+        clock_in: r.clock_in || null,
+        site_arrival: r.site_arrival,
+        site_departure: r.site_departure,
+        clock_out: r.clock_out || null,
         break_minutes: r.break_minutes ?? 60,
       }))
       const { error: recordError } = await createWorkRecords(recordsToCreate)

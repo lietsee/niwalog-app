@@ -28,8 +28,9 @@ export function WorkDayCard({ workDay, onEdit, onDelete, onDuplicate, onClick }:
     return workDay.weather.map((w) => w.condition).join(' → ')
   }
 
-  const totalHours = workDay.work_records.reduce(
-    (sum, record) => sum + (record.working_hours || 0),
+  // 現場作業時間の合計を計算
+  const totalSiteHours = workDay.work_records.reduce(
+    (sum, record) => sum + (record.site_hours || 0),
     0
   )
 
@@ -66,9 +67,9 @@ export function WorkDayCard({ workDay, onEdit, onDelete, onDuplicate, onClick }:
               <div className="flex items-center text-muted-foreground">
                 <Users className="h-4 w-4 mr-1" />
                 {workDay.work_records.length}名
-                {totalHours > 0 && (
+                {totalSiteHours > 0 && (
                   <span className="ml-2">
-                    （計 {totalHours.toFixed(1)} 時間）
+                    （現場 {totalSiteHours.toFixed(1)} 時間）
                   </span>
                 )}
               </div>

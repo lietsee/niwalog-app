@@ -6,15 +6,17 @@ export const weatherEntrySchema = z.object({
   condition: z.string().min(1, '天候を入力してください'),
 })
 
-// 従事者稼働記録のスキーマ（インライン編集用）
+// 従事者稼働記録のスキーマ（4時刻対応）
 export const workRecordInputSchema = z.object({
   id: z.string().optional(), // 既存レコードの場合はID
   employee_code: z
     .string()
     .min(1, '従業員コードを入力してください')
     .max(10, '従業員コードは10文字以内で入力してください'),
-  start_time: z.string().min(1, '開始時刻を入力してください'),
-  end_time: z.string().min(1, '終了時刻を入力してください'),
+  clock_in: z.string().nullable().optional(),         // 出勤時間（途中合流の場合は空）
+  site_arrival: z.string().min(1, '現場到着時刻を入力してください'),   // 現場到着時間（必須）
+  site_departure: z.string().min(1, '現場撤収時刻を入力してください'), // 現場撤収時間（必須）
+  clock_out: z.string().nullable().optional(),        // 退勤時間（途中離脱の場合は空）
   break_minutes: z.coerce
     .number()
     .int('休憩時間は整数で入力してください')

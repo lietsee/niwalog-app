@@ -81,15 +81,20 @@ export type WorkDayWithRecords = WorkDay & {
   work_records: WorkRecord[]
 }
 
-// WorkRecord (従事者稼働記録)
+// WorkRecord (従事者稼働記録) - 4時刻対応
 export type WorkRecord = {
   id: string
   work_day_id: string
   employee_code: string
-  start_time: string
-  end_time: string
+  clock_in: string | null        // 出勤時間（土場）- 途中合流の場合はnull
+  site_arrival: string           // 現場到着時間
+  site_departure: string         // 現場撤収時間
+  clock_out: string | null       // 退勤時間（土場）- 途中離脱の場合はnull
   break_minutes: number
-  working_hours: number | null
+  site_hours: number | null      // 現場作業時間（自動計算）
+  prep_hours: number | null      // 準備＋移動時間（自動計算）
+  return_hours: number | null    // 帰社時間（自動計算）
+  total_hours: number | null     // 総拘束時間（自動計算）
   created_at: string
   updated_at: string
 }

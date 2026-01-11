@@ -265,6 +265,7 @@ COMMENT ON TABLE work_days_history IS '日別作業記録履歴: 削除・更新
 -- 4. work_records（従事者稼働記録）
 -- ============================================================================
 -- 日別・従業員別の稼働時間を記録。
+-- 4つの打刻時刻で途中合流・途中離脱パターンに対応。
 
 CREATE TABLE work_records (
   -- 主キー
@@ -274,11 +275,18 @@ CREATE TABLE work_records (
   work_day_id UUID NOT NULL REFERENCES work_days(id) ON DELETE RESTRICT,
   employee_code VARCHAR(10) NOT NULL,      -- 従業員番号（例: f001, f002, p002）
 
-  -- 稼働時間
-  start_time TIME NOT NULL,                -- 開始時刻
-  end_time TIME NOT NULL,                  -- 終了時刻
+  -- 4つの打刻時刻（途中合流/途中離脱対応）
+  clock_in TIME,                           -- 出勤時間（土場）※途中合流の場合はNULL
+  site_arrival TIME NOT NULL,              -- 現場到着時間
+  site_departure TIME NOT NULL,            -- 現場撤収時間
+  clock_out TIME,                          -- 退勤時間（土場）※途中離脱の場合はNULL
   break_minutes INTEGER DEFAULT 60,        -- 休憩時間（分）、デフォルト60分
-  working_hours DECIMAL(5, 2),             -- 稼働時間（自動計算: end_time - start_time - break_minutes）
+
+  -- 自動計算カラム
+  site_hours DECIMAL(5, 2),                -- 現場作業時間（撤収-到着-休憩）
+  prep_hours DECIMAL(5, 2),                -- 準備＋移動時間（到着-出勤）
+  return_hours DECIMAL(5, 2),              -- 帰社時間（退勤-撤収）
+  total_hours DECIMAL(5, 2),               -- 総拘束時間（退勤-出勤）
 
   -- メタデータ
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -291,8 +299,16 @@ CREATE INDEX idx_work_records_employee ON work_records(employee_code);
 CREATE INDEX idx_work_records_employee_day ON work_records(employee_code, work_day_id);
 
 -- コメント
-COMMENT ON TABLE work_records IS '従事者稼働記録: 日別・従業員別の稼働時間を記録';
+COMMENT ON TABLE work_records IS '従事者稼働記録: 日別・従業員別の稼働時間を記録（4時刻対応）';
 COMMENT ON COLUMN work_records.employee_code IS '従業員番号（既存のSupabase DBの従業員マスタと連携予定）';
+COMMENT ON COLUMN work_records.clock_in IS '出勤時間（土場）。途中合流の場合はNULL';
+COMMENT ON COLUMN work_records.site_arrival IS '現場到着時間（必須）';
+COMMENT ON COLUMN work_records.site_departure IS '現場撤収時間（必須）';
+COMMENT ON COLUMN work_records.clock_out IS '退勤時間（土場）。途中離脱の場合はNULL';
+COMMENT ON COLUMN work_records.site_hours IS '現場作業時間=撤収-到着-休憩（自動計算）';
+COMMENT ON COLUMN work_records.prep_hours IS '準備＋移動時間=到着-出勤（自動計算、出勤がある場合のみ）';
+COMMENT ON COLUMN work_records.return_hours IS '帰社時間=退勤-撤収（自動計算、退勤がある場合のみ）';
+COMMENT ON COLUMN work_records.total_hours IS '総拘束時間=退勤-出勤（自動計算、両方ある場合のみ）';
 
 -- ============================================================================
 -- 4-H. work_records_history（従事者稼働記録履歴）
@@ -305,10 +321,15 @@ CREATE TABLE work_records_history (
   id UUID NOT NULL,
   work_day_id UUID NOT NULL,
   employee_code VARCHAR(10) NOT NULL,
-  start_time TIME NOT NULL,
-  end_time TIME NOT NULL,
+  clock_in TIME,                           -- 出勤時間
+  site_arrival TIME NOT NULL,              -- 現場到着時間
+  site_departure TIME NOT NULL,            -- 現場撤収時間
+  clock_out TIME,                          -- 退勤時間
   break_minutes INTEGER,
-  working_hours DECIMAL(5, 2),
+  site_hours DECIMAL(5, 2),                -- 現場作業時間
+  prep_hours DECIMAL(5, 2),                -- 準備＋移動時間
+  return_hours DECIMAL(5, 2),              -- 帰社時間
+  total_hours DECIMAL(5, 2),               -- 総拘束時間
   created_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ,
 
@@ -324,7 +345,7 @@ CREATE INDEX idx_work_records_history_day ON work_records_history(work_day_id);
 CREATE INDEX idx_work_records_history_employee ON work_records_history(employee_code);
 CREATE INDEX idx_work_records_history_operation_at ON work_records_history(operation_at DESC);
 
-COMMENT ON TABLE work_records_history IS '従事者稼働記録履歴: 削除・更新された稼働記録を保管';
+COMMENT ON TABLE work_records_history IS '従事者稼働記録履歴: 削除・更新された稼働記録を保管（4時刻対応）';
 
 -- ============================================================================
 -- 5. expenses（経費）
@@ -391,14 +412,36 @@ COMMENT ON TABLE expenses_history IS '経費履歴: 削除・更新された経�
 -- ============================================================================
 
 -- ============================================================================
--- A. working_hoursを自動計算するトリガー関数
+-- A. 稼働時間を自動計算するトリガー関数（4時刻対応）
 -- ============================================================================
 CREATE OR REPLACE FUNCTION calculate_working_hours()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- 稼働時間 = (終了時刻 - 開始時刻) - 休憩時間
-  NEW.working_hours := (EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) / 3600)
-                       - (COALESCE(NEW.break_minutes, 60) / 60.0);
+  -- 現場作業時間 = 撤収 - 到着 - 休憩
+  NEW.site_hours := (EXTRACT(EPOCH FROM (NEW.site_departure - NEW.site_arrival)) / 3600)
+                    - (COALESCE(NEW.break_minutes, 60) / 60.0);
+
+  -- 準備＋移動時間（clock_inがある場合のみ）
+  IF NEW.clock_in IS NOT NULL AND NEW.site_arrival IS NOT NULL THEN
+    NEW.prep_hours := EXTRACT(EPOCH FROM (NEW.site_arrival - NEW.clock_in)) / 3600;
+  ELSE
+    NEW.prep_hours := NULL;
+  END IF;
+
+  -- 帰社時間（clock_outがある場合のみ）
+  IF NEW.site_departure IS NOT NULL AND NEW.clock_out IS NOT NULL THEN
+    NEW.return_hours := EXTRACT(EPOCH FROM (NEW.clock_out - NEW.site_departure)) / 3600;
+  ELSE
+    NEW.return_hours := NULL;
+  END IF;
+
+  -- 総拘束時間（両方ある場合のみ）
+  IF NEW.clock_in IS NOT NULL AND NEW.clock_out IS NOT NULL THEN
+    NEW.total_hours := EXTRACT(EPOCH FROM (NEW.clock_out - NEW.clock_in)) / 3600;
+  ELSE
+    NEW.total_hours := NULL;
+  END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -574,28 +617,36 @@ BEFORE UPDATE OR DELETE ON work_days
 FOR EACH ROW
 EXECUTE FUNCTION archive_work_days_to_history();
 
--- work_records用
+-- work_records用（4時刻対応）
 CREATE OR REPLACE FUNCTION archive_work_records_to_history()
 RETURNS TRIGGER AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
     INSERT INTO work_records_history (
-      id, work_day_id, employee_code, start_time, end_time, break_minutes, working_hours,
+      id, work_day_id, employee_code,
+      clock_in, site_arrival, site_departure, clock_out,
+      break_minutes, site_hours, prep_hours, return_hours, total_hours,
       created_at, updated_at,
       operation_type, operation_by
     ) VALUES (
-      OLD.id, OLD.work_day_id, OLD.employee_code, OLD.start_time, OLD.end_time, OLD.break_minutes, OLD.working_hours,
+      OLD.id, OLD.work_day_id, OLD.employee_code,
+      OLD.clock_in, OLD.site_arrival, OLD.site_departure, OLD.clock_out,
+      OLD.break_minutes, OLD.site_hours, OLD.prep_hours, OLD.return_hours, OLD.total_hours,
       OLD.created_at, OLD.updated_at,
       'DELETE', auth.uid()
     );
     RETURN OLD;
   ELSIF TG_OP = 'UPDATE' THEN
     INSERT INTO work_records_history (
-      id, work_day_id, employee_code, start_time, end_time, break_minutes, working_hours,
+      id, work_day_id, employee_code,
+      clock_in, site_arrival, site_departure, clock_out,
+      break_minutes, site_hours, prep_hours, return_hours, total_hours,
       created_at, updated_at,
       operation_type, operation_by
     ) VALUES (
-      OLD.id, OLD.work_day_id, OLD.employee_code, OLD.start_time, OLD.end_time, OLD.break_minutes, OLD.working_hours,
+      OLD.id, OLD.work_day_id, OLD.employee_code,
+      OLD.clock_in, OLD.site_arrival, OLD.site_departure, OLD.clock_out,
+      OLD.break_minutes, OLD.site_hours, OLD.prep_hours, OLD.return_hours, OLD.total_hours,
       OLD.created_at, OLD.updated_at,
       'UPDATE', auth.uid()
     );

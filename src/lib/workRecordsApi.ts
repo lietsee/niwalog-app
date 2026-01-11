@@ -1,11 +1,14 @@
 import { supabase } from './supabaseClient'
 import type { ApiResponse, WorkRecord } from './types'
 
+// 4時刻対応の入力型
 export type WorkRecordInput = {
   work_day_id: string
   employee_code: string
-  start_time: string
-  end_time: string
+  clock_in?: string | null       // 出勤時間（途中合流の場合は省略/null）
+  site_arrival: string           // 現場到着時間（必須）
+  site_departure: string         // 現場撤収時間（必須）
+  clock_out?: string | null      // 退勤時間（途中離脱の場合は省略/null）
   break_minutes?: number
 }
 
@@ -18,7 +21,7 @@ export async function listWorkRecordsByWorkDay(workDayId: string): Promise<ApiRe
       .from('work_records')
       .select('*')
       .eq('work_day_id', workDayId)
-      .order('start_time', { ascending: true })
+      .order('site_arrival', { ascending: true })
 
     if (error) {
       console.error('Supabase error:', error)

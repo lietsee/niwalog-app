@@ -192,10 +192,10 @@ export async function getEmployeeWorkSummary(
 
     const workDayIds = workDays.map((wd) => wd.id)
 
-    // 従事者記録取得
+    // 従事者記録取得（site_hoursで現場作業時間を集計）
     const { data: records, error: recordsError } = await supabase
       .from('work_records')
-      .select('employee_code, working_hours')
+      .select('employee_code, site_hours')
       .in('work_day_id', workDayIds)
 
     if (recordsError) {
@@ -203,13 +203,13 @@ export async function getEmployeeWorkSummary(
       return { data: null, error: recordsError.message, status: 400 }
     }
 
-    // 従業員コードごとに集計
+    // 従業員コードごとに集計（現場作業時間）
     const employeeHours: Record<string, number> = {}
     for (const record of records || []) {
       if (!employeeHours[record.employee_code]) {
         employeeHours[record.employee_code] = 0
       }
-      employeeHours[record.employee_code] += record.working_hours || 0
+      employeeHours[record.employee_code] += record.site_hours || 0
     }
 
     const summary: EmployeeWorkSummary[] = Object.entries(employeeHours)
