@@ -19,6 +19,7 @@ import {
   deleteField,
   type Field,
 } from '@/lib/fieldsApi'
+import { translateSupabaseError } from '@/lib/errorMessages'
 import type { Page } from '@/lib/types'
 
 interface FieldListPageProps {
@@ -94,8 +95,9 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
     const { error: err } = await deleteField(fieldToDelete.id)
 
     if (err) {
-      setError(err)
-      toast.error(`削除に失敗しました: ${err}`)
+      const translatedError = translateSupabaseError(err)
+      setError(translatedError)
+      toast.error(translatedError)
       setDeleting(false)
     } else {
       // 削除成功したらリストから除外
