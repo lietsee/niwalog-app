@@ -105,6 +105,37 @@ export type Expense = {
   updated_at: string
 }
 
+// Dashboard Summary
+export type DashboardSummary = {
+  totalFields: number
+  totalProjects: number
+  monthlyInvoice: number
+  monthlyExpense: number
+  monthlyLaborCost: number
+}
+
+// Monthly Stats
+export type MonthlyStats = {
+  month: string
+  invoice: number
+  expense: number
+  laborCost: number
+}
+
+// Employee Work Summary
+export type EmployeeWorkSummary = {
+  employeeCode: string
+  totalHours: number
+}
+
+// Recent Project
+export type RecentProject = {
+  id: string
+  fieldName: string
+  implementationDate: string
+  invoiceAmount: number | null
+}
+
 // Page Type for routing
 export type Page =
   | 'login'

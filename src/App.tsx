@@ -55,7 +55,7 @@ function App() {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
         setAuthed(true)
-        setCurrentPage('field-list')
+        setCurrentPage('dashboard')
       }
       setLoading(false)
     }
@@ -66,7 +66,7 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
         setAuthed(true)
-        setCurrentPage('field-list')
+        setCurrentPage('dashboard')
       } else {
         setAuthed(false)
         setCurrentPage('login')
@@ -89,7 +89,7 @@ function App() {
   if (!authed) {
     return (
       <>
-        <LoginPage onSuccess={() => handleNavigate('field-list')} />
+        <LoginPage onSuccess={() => handleNavigate('dashboard')} />
         <Toaster position="top-right" />
       </>
     )
@@ -98,7 +98,9 @@ function App() {
   return (
     <>
       <div className="min-h-screen bg-gray-50">
-        {currentPage === 'dashboard' && <DashboardPage />}
+        {currentPage === 'dashboard' && (
+          <DashboardPage onNavigate={handleNavigate} />
+        )}
         {currentPage === 'field-list' && (
           <FieldListPage onNavigate={handleNavigate} />
         )}

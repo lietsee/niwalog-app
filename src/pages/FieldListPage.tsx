@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, LayoutDashboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -121,10 +121,16 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
         <div className="flex flex-col gap-4 mb-6">
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold">現場一覧</h1>
-            <Button onClick={() => onNavigate('field-form')}>
-              <Plus className="h-4 w-4 mr-2" />
-              新規登録
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => onNavigate('dashboard')}>
+                <LayoutDashboard className="h-4 w-4 mr-2" />
+                ダッシュボード
+              </Button>
+              <Button onClick={() => onNavigate('field-form')}>
+                <Plus className="h-4 w-4 mr-2" />
+                新規登録
+              </Button>
+            </div>
           </div>
 
           <div className="flex gap-2">
