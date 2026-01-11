@@ -1,4 +1,4 @@
-import { Calendar, Cloud, Users, Pencil, Trash2 } from 'lucide-react'
+import { Calendar, Cloud, Users, Copy, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,10 +8,11 @@ interface WorkDayCardProps {
   workDay: WorkDayWithRecords
   onEdit: (workDay: WorkDayWithRecords) => void
   onDelete: (workDay: WorkDayWithRecords) => void
+  onDuplicate?: (workDay: WorkDayWithRecords) => void
   onClick?: (workDay: WorkDayWithRecords) => void
 }
 
-export function WorkDayCard({ workDay, onEdit, onDelete, onClick }: WorkDayCardProps) {
+export function WorkDayCard({ workDay, onEdit, onDelete, onDuplicate, onClick }: WorkDayCardProps) {
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return date.toLocaleDateString('ja-JP', {
@@ -81,6 +82,19 @@ export function WorkDayCard({ workDay, onEdit, onDelete, onClick }: WorkDayCardP
           </div>
 
           <div className="flex gap-1 ml-2">
+            {onDuplicate && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDuplicate(workDay)
+                }}
+                title="この作業日を複製"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"

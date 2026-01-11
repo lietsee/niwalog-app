@@ -17,7 +17,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { getProjectWithField } from '@/lib/projectsApi'
-import { listWorkDaysWithRecords, deleteWorkDay } from '@/lib/workDaysApi'
+import { listWorkDaysWithRecords, deleteWorkDay, createWorkDay, getNextDayNumber } from '@/lib/workDaysApi'
+import { createWorkRecords } from '@/lib/workRecordsApi'
 import { listExpensesByProject, deleteExpense } from '@/lib/expensesApi'
 import { WorkDayCard } from '@/components/WorkDayCard'
 import { ExpenseCard } from '@/components/ExpenseCard'
@@ -108,6 +109,48 @@ export function ProjectDetailPage({
       loadData()
     }
     setDeleteTarget(null)
+  }
+
+  const handleDuplicateWorkDay = async (workDay: WorkDayWithRecords) => {
+    // 次の日番号を取得
+    const nextNumberResult = await getNextDayNumber(projectId)
+    if (nextNumberResult.error) {
+      toast.error(`日番号の取得に失敗しました: ${translateSupabaseError(nextNumberResult.error)}`)
+      return
+    }
+
+    // 作業日を複製
+    const { data: createdWorkDay, error: createError } = await createWorkDay({
+      project_id: projectId,
+      day_number: nextNumberResult.data!,
+      work_date: workDay.work_date,
+      weather: workDay.weather,
+      work_description: workDay.work_description,
+      troubles: workDay.troubles,
+    })
+
+    if (createError || !createdWorkDay) {
+      toast.error(`作業日の複製に失敗しました: ${translateSupabaseError(createError || '')}`)
+      return
+    }
+
+    // 従事者稼働記録を複製
+    if (workDay.work_records.length > 0) {
+      const recordsToCreate = workDay.work_records.map((r) => ({
+        work_day_id: createdWorkDay.id,
+        employee_code: r.employee_code,
+        start_time: r.start_time,
+        end_time: r.end_time,
+        break_minutes: r.break_minutes ?? 60,
+      }))
+      const { error: recordError } = await createWorkRecords(recordsToCreate)
+      if (recordError) {
+        toast.error(`従事者記録の複製に失敗しました: ${translateSupabaseError(recordError)}`)
+      }
+    }
+
+    toast.success(`作業日を複製しました（${nextNumberResult.data}日目）`)
+    loadData()
   }
 
   const formatDate = (dateStr: string) => {
@@ -202,6 +245,7 @@ export function ProjectDetailPage({
                         name: `${wd.day_number}日目`,
                       })
                     }
+                    onDuplicate={handleDuplicateWorkDay}
                   />
                 ))}
               </div>
