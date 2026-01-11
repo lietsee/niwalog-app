@@ -373,7 +373,8 @@ niwalog-app/
 | employee_code | VARCHAR(50) | NOT NULL | 従業員コード |
 | start_time | TIME | NOT NULL | 開始時刻 |
 | end_time | TIME | NOT NULL | 終了時刻 |
-| working_hours | NUMERIC(4, 2) | NULL | 稼働時間（自動計算） |
+| break_minutes | INTEGER | DEFAULT 60 | 休憩時間（分） |
+| working_hours | NUMERIC(5, 2) | NULL | 稼働時間（自動計算: end_time - start_time - break_minutes） |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時（自動） |
 
@@ -452,18 +453,20 @@ CREATE TRIGGER update_fields_updated_at BEFORE UPDATE ON fields FOR EACH ROW EXE
 
 #### 2. calculate_working_hours()
 
-`work_records`の`working_hours`を自動計算（end_time - start_time）。
+`work_records`の`working_hours`を自動計算（end_time - start_time - break_minutes）。
 
 ```sql
 CREATE OR REPLACE FUNCTION calculate_working_hours()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.working_hours = EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) / 3600;
+  -- 稼働時間 = (終了時刻 - 開始時刻) - 休憩時間
+  NEW.working_hours := (EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) / 3600)
+                       - (COALESCE(NEW.break_minutes, 60) / 60.0);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER calculate_working_hours_trigger BEFORE INSERT OR UPDATE ON work_records FOR EACH ROW EXECUTE FUNCTION calculate_working_hours();
+CREATE TRIGGER trg_calculate_working_hours BEFORE INSERT OR UPDATE ON work_records FOR EACH ROW EXECUTE FUNCTION calculate_working_hours();
 ```
 
 #### 3. archive_*_to_history()

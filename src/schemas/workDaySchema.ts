@@ -15,6 +15,11 @@ export const workRecordInputSchema = z.object({
     .max(10, '従業員コードは10文字以内で入力してください'),
   start_time: z.string().min(1, '開始時刻を入力してください'),
   end_time: z.string().min(1, '終了時刻を入力してください'),
+  break_minutes: z.coerce
+    .number()
+    .int('休憩時間は整数で入力してください')
+    .min(0, '休憩時間は0以上で入力してください')
+    .default(60),
 })
 
 // 作業日スキーマ

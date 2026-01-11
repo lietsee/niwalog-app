@@ -88,6 +88,7 @@ export type WorkRecord = {
   employee_code: string
   start_time: string
   end_time: string
+  break_minutes: number
   working_hours: number | null
   created_at: string
   updated_at: string

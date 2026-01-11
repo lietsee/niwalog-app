@@ -105,6 +105,7 @@ export function WorkDayFormPage({
           employee_code: r.employee_code,
           start_time: r.start_time,
           end_time: r.end_time,
+          break_minutes: r.break_minutes ?? 60,
         }))
         setWorkRecords(records)
         setExistingRecordIds(data.work_records.map((r: WorkRecord) => r.id))
@@ -168,6 +169,7 @@ export function WorkDayFormPage({
           employee_code: r.employee_code,
           start_time: r.start_time,
           end_time: r.end_time,
+          break_minutes: r.break_minutes ?? 60,
         }))
         const { error: recordErr } = await createWorkRecords(recordsToCreate)
         if (recordErr) {
@@ -189,13 +191,14 @@ export function WorkDayFormPage({
     }
 
     // 既存レコードを更新、新規レコードを作成
-    const newRecords: { work_day_id: string; employee_code: string; start_time: string; end_time: string }[] = []
+    const newRecords: { work_day_id: string; employee_code: string; start_time: string; end_time: string; break_minutes: number }[] = []
     for (const record of workRecords) {
       if (record.id) {
         await updateWorkRecord(record.id, {
           employee_code: record.employee_code,
           start_time: record.start_time,
           end_time: record.end_time,
+          break_minutes: record.break_minutes ?? 60,
         })
       } else {
         newRecords.push({
@@ -203,6 +206,7 @@ export function WorkDayFormPage({
           employee_code: record.employee_code,
           start_time: record.start_time,
           end_time: record.end_time,
+          break_minutes: record.break_minutes ?? 60,
         })
       }
     }

@@ -277,7 +277,8 @@ CREATE TABLE work_records (
   -- 稼働時間
   start_time TIME NOT NULL,                -- 開始時刻
   end_time TIME NOT NULL,                  -- 終了時刻
-  working_hours DECIMAL(5, 2),             -- 稼働時間（自動計算: end_time - start_time）
+  break_minutes INTEGER DEFAULT 60,        -- 休憩時間（分）、デフォルト60分
+  working_hours DECIMAL(5, 2),             -- 稼働時間（自動計算: end_time - start_time - break_minutes）
 
   -- メタデータ
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -306,6 +307,7 @@ CREATE TABLE work_records_history (
   employee_code VARCHAR(10) NOT NULL,
   start_time TIME NOT NULL,
   end_time TIME NOT NULL,
+  break_minutes INTEGER,
   working_hours DECIMAL(5, 2),
   created_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ,
@@ -394,7 +396,9 @@ COMMENT ON TABLE expenses_history IS '経費履歴: 削除・更新された経�
 CREATE OR REPLACE FUNCTION calculate_working_hours()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.working_hours := EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) / 3600;
+  -- 稼働時間 = (終了時刻 - 開始時刻) - 休憩時間
+  NEW.working_hours := (EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) / 3600)
+                       - (COALESCE(NEW.break_minutes, 60) / 60.0);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -576,22 +580,22 @@ RETURNS TRIGGER AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
     INSERT INTO work_records_history (
-      id, work_day_id, employee_code, start_time, end_time, working_hours,
+      id, work_day_id, employee_code, start_time, end_time, break_minutes, working_hours,
       created_at, updated_at,
       operation_type, operation_by
     ) VALUES (
-      OLD.id, OLD.work_day_id, OLD.employee_code, OLD.start_time, OLD.end_time, OLD.working_hours,
+      OLD.id, OLD.work_day_id, OLD.employee_code, OLD.start_time, OLD.end_time, OLD.break_minutes, OLD.working_hours,
       OLD.created_at, OLD.updated_at,
       'DELETE', auth.uid()
     );
     RETURN OLD;
   ELSIF TG_OP = 'UPDATE' THEN
     INSERT INTO work_records_history (
-      id, work_day_id, employee_code, start_time, end_time, working_hours,
+      id, work_day_id, employee_code, start_time, end_time, break_minutes, working_hours,
       created_at, updated_at,
       operation_type, operation_by
     ) VALUES (
-      OLD.id, OLD.work_day_id, OLD.employee_code, OLD.start_time, OLD.end_time, OLD.working_hours,
+      OLD.id, OLD.work_day_id, OLD.employee_code, OLD.start_time, OLD.end_time, OLD.break_minutes, OLD.working_hours,
       OLD.created_at, OLD.updated_at,
       'UPDATE', auth.uid()
     );

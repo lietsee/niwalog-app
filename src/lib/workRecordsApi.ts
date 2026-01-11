@@ -6,6 +6,7 @@ export type WorkRecordInput = {
   employee_code: string
   start_time: string
   end_time: string
+  break_minutes?: number
 }
 
 /**
