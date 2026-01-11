@@ -37,7 +37,7 @@ export function FieldFormPage({ onNavigate, fieldId }: FieldFormPageProps) {
     setValue,
     watch,
   } = useForm<FieldFormData>({
-    resolver: zodResolver(fieldSchema),
+    resolver: zodResolver(fieldSchema) as never,
     defaultValues: {
       field_code: '',
       field_name: '',

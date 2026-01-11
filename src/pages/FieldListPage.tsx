@@ -78,6 +78,10 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
     onNavigate('field-form', field.id)
   }
 
+  const handleCardClick = (field: Field) => {
+    onNavigate('project-list', field.id)
+  }
+
   const handleDeleteClick = (field: Field) => {
     setFieldToDelete(field)
     setDeleteDialogOpen(true)
@@ -179,6 +183,7 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
                 field={field}
                 onEdit={handleEdit}
                 onDelete={handleDeleteClick}
+                onClick={handleCardClick}
               />
             ))}
           </div>

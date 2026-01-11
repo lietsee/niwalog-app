@@ -37,7 +37,7 @@ export type Project = {
   work_type_cleaning: boolean
   work_type_other: string | null
   estimate_amount: number | null
-  invoice_amount: number
+  invoice_amount: number | null
   labor_cost: number | null
   expense_total: number | null
   review_good_points: string | null
@@ -46,6 +46,15 @@ export type Project = {
   created_at: string
   updated_at: string
   created_by: string | null
+}
+
+// ProjectWithField (現場情報付き案件)
+export type ProjectWithField = Project & {
+  fields: {
+    field_code: string
+    field_name: string
+    customer_name: string | null
+  }
 }
 
 // Page Type for routing

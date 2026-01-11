@@ -5,6 +5,8 @@ import { LoginPage } from '@/pages/LoginPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { FieldListPage } from '@/pages/FieldListPage'
 import { FieldFormPage } from '@/pages/FieldFormPage'
+import { ProjectListPage } from '@/pages/ProjectListPage'
+import { ProjectFormPage } from '@/pages/ProjectFormPage'
 import type { Page } from '@/lib/types'
 
 function App() {
@@ -14,10 +16,20 @@ function App() {
   const [selectedFieldId, setSelectedFieldId] = useState<string | undefined>(
     undefined
   )
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>(
+    undefined
+  )
 
-  const handleNavigate = (page: Page, fieldId?: string) => {
+  const handleNavigate = (page: Page, id?: string) => {
     setCurrentPage(page)
-    setSelectedFieldId(fieldId)
+    if (page === 'field-form') {
+      setSelectedFieldId(id)
+    } else if (page === 'project-list') {
+      setSelectedFieldId(id)
+      setSelectedProjectId(undefined)
+    } else if (page === 'project-form') {
+      setSelectedProjectId(id)
+    }
   }
 
   useEffect(() => {
@@ -34,7 +46,7 @@ function App() {
     checkAuth()
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
         setAuthed(true)
         setCurrentPage('field-list')
@@ -79,7 +91,22 @@ function App() {
             fieldId={selectedFieldId}
           />
         )}
-        {/* 他のページは後で追加 */}
+        {currentPage === 'project-list' && selectedFieldId && (
+          <ProjectListPage
+            fieldId={selectedFieldId}
+            onBack={() => handleNavigate('field-list')}
+            onCreateProject={() => handleNavigate('project-form')}
+            onEditProject={(projectId) => handleNavigate('project-form', projectId)}
+          />
+        )}
+        {currentPage === 'project-form' && selectedFieldId && (
+          <ProjectFormPage
+            fieldId={selectedFieldId}
+            projectId={selectedProjectId}
+            onBack={() => handleNavigate('project-list', selectedFieldId)}
+            onSuccess={() => handleNavigate('project-list', selectedFieldId)}
+          />
+        )}
       </div>
       <Toaster position="top-right" />
     </>

@@ -121,7 +121,7 @@ CREATE TABLE projects (
 
   -- 金額
   estimate_amount INTEGER,                 -- 見積もり金額（NULL可: 例年作業の場合）
-  invoice_amount INTEGER NOT NULL,         -- 請求金額
+  invoice_amount INTEGER,                  -- 請求金額（NULL可: 案件登録時点で未定の場合）
 
   -- 収支計算用（集計値、または手動入力）
   labor_cost INTEGER,                      -- 人件費（自動計算または手動）

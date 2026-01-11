@@ -8,11 +8,24 @@ interface FieldCardProps {
   field: Field
   onEdit: (field: Field) => void
   onDelete: (field: Field) => void
+  onClick?: (field: Field) => void
 }
 
-export function FieldCard({ field, onEdit, onDelete }: FieldCardProps) {
+export function FieldCard({ field, onEdit, onDelete, onClick }: FieldCardProps) {
+  const handleCardClick = () => {
+    onClick?.(field)
+  }
+
+  const handleButtonClick = (e: React.MouseEvent, action: () => void) => {
+    e.stopPropagation()
+    action()
+  }
+
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card
+      className={`hover:shadow-md transition-shadow ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={handleCardClick}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
@@ -25,7 +38,7 @@ export function FieldCard({ field, onEdit, onDelete }: FieldCardProps) {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onEdit(field)}
+              onClick={(e) => handleButtonClick(e, () => onEdit(field))}
               className="h-8 w-8"
             >
               <Pencil className="h-4 w-4" />
@@ -33,7 +46,7 @@ export function FieldCard({ field, onEdit, onDelete }: FieldCardProps) {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onDelete(field)}
+              onClick={(e) => handleButtonClick(e, () => onDelete(field))}
               className="h-8 w-8 text-destructive hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" />

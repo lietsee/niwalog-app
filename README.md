@@ -31,7 +31,7 @@ NiwaLogは、造園・庭園管理業務における現場ごとの詳細情報�
 ### 主要機能概要
 
 - **現場マスタ管理**: 現場情報のCRUD、検索機能
-- **案件管理**: 実施日ごとの作業記録（未実装）
+- **案件管理**: 実施日ごとの作業記録、自動採番
 - **日別作業記録**: 複数日作業の管理と従事者稼働記録（未実装）
 - **ダッシュボード**: 収益性分析、稼働分析（未実装）
 
@@ -201,13 +201,16 @@ niwalog-app/
 │   │   ├── supabaseClient.ts     # Supabase初期化
 │   │   ├── types.ts              # 共通型定義
 │   │   ├── fieldsApi.ts          # 現場API（全CRUD + 検索）
+│   │   ├── projectsApi.ts        # 案件API（全CRUD + 自動採番）
 │   │   ├── errorMessages.ts      # エラーメッセージ翻訳
 │   │   └── utils.ts              # ユーティリティ関数
 │   ├── pages/                    # ページコンポーネント
 │   │   ├── LoginPage.tsx         # ログイン画面
 │   │   ├── DashboardPage.tsx     # ダッシュボード（未実装）
 │   │   ├── FieldListPage.tsx     # 現場一覧・検索・削除
-│   │   └── FieldFormPage.tsx     # 現場作成・編集フォーム
+│   │   ├── FieldFormPage.tsx     # 現場作成・編集フォーム
+│   │   ├── ProjectListPage.tsx   # 案件一覧・削除
+│   │   └── ProjectFormPage.tsx   # 案件作成・編集フォーム
 │   ├── components/               # UIコンポーネント
 │   │   ├── ui/                   # Radix UI ベースコンポーネント
 │   │   │   ├── button.tsx
@@ -218,9 +221,11 @@ niwalog-app/
 │   │   │   ├── textarea.tsx
 │   │   │   ├── checkbox.tsx
 │   │   │   └── badge.tsx
-│   │   └── FieldCard.tsx         # 現場カード表示
+│   │   ├── FieldCard.tsx         # 現場カード表示
+│   │   └── ProjectCard.tsx       # 案件カード表示
 │   ├── schemas/                  # Zodバリデーションスキーマ
-│   │   └── fieldSchema.ts
+│   │   ├── fieldSchema.ts
+│   │   └── projectSchema.ts
 │   ├── App.tsx                   # ルーティング・認証チェック
 │   └── main.tsx                  # エントリーポイント
 ├── supabase/
@@ -576,32 +581,70 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 - 移動時間: 整数、0以上、NaN対応
 - 移動費: 整数、0以上、NaN対応
 
+### Phase 3: 案件管理（完了 ✅）
+
+**実装内容:**
+- 案件CRUD（作成・読取・更新・削除）
+- 現場カードクリックで案件一覧へ遷移
+- 案件番号の自動採番（編集可能）
+- フォームバリデーション（Zod）
+- 削除時の履歴自動退避
+
+**主要ファイル:**
+- `src/pages/ProjectListPage.tsx`: 案件一覧・削除
+- `src/pages/ProjectFormPage.tsx`: 案件作成・編集フォーム
+- `src/components/ProjectCard.tsx`: 案件カード表示
+- `src/lib/projectsApi.ts`: 案件API（全CRUD + 自動採番）
+- `src/schemas/projectSchema.ts`: Zodバリデーションスキーマ
+
+**機能詳細:**
+
+#### 画面遷移
+```
+現場一覧 → 現場カードをクリック → 案件一覧 → 案件作成/編集
+```
+
+#### 案件一覧（ProjectListPage）
+- 現場情報をヘッダーに表示（現場コード、現場名、顧客名）
+- 案件一覧をカードで表示（実施日降順）
+- 「新規案件」ボタン
+- 各案件に「編集」「削除」ボタン
+- 削除確認ダイアログ
+- 戻るボタンで現場一覧へ
+
+#### 案件作成・編集（ProjectFormPage）
+- フォームセクション:
+  - 基本情報（案件番号、実施日）
+  - 作業内容（剪定・除草・清掃チェックボックス、その他作業内容）
+  - 金額情報（見積金額、請求金額、人件費）
+  - 振り返り（良かった点、改善点、次回への申し送り）
+- 案件番号は自動採番（現場ごとに連番）、ただし編集可能
+- 実施日は新規作成時に今日の日付がデフォルト
+- リアルタイムバリデーション
+- 保存成功時のトースト通知
+
+#### API層（projectsApi.ts）
+- `listProjectsByField(fieldId)`: 現場ごとの案件一覧取得
+- `getProjectById(id)`: 案件詳細取得
+- `getProjectWithField(id)`: 現場情報付きで案件取得
+- `getNextProjectNumber(fieldId)`: 次の案件番号を取得（自動採番用）
+- `createProject(project)`: 案件作成（created_byを自動設定）
+- `updateProject(id, project)`: 案件更新
+- `deleteProject(id)`: 案件削除（履歴に自動退避）
+
+#### バリデーション（projectSchema.ts）
+- 案件番号: 必須、1以上の整数
+- 実施日: 必須
+- 作業種別: チェックボックス（複数選択可）
+- その他作業内容: 255文字以内
+- 見積金額: 0以上の整数（任意）
+- 請求金額: 0以上の整数（任意）
+- 人件費: 0以上の整数（任意）
+- 振り返り項目: テキスト（任意）
+
 ---
 
 ## 未実装機能
-
-### Phase 3: 案件管理（未実装）
-
-**概要:** 現場ごとの案件（実施日ごとの作業）を記録・管理。
-
-**実装予定:**
-- 案件一覧表示（現場ごと）
-- 案件作成フォーム
-  - 現場選択（プルダウン）
-  - 実施日
-  - 作業種別（剪定・除草・清掃・その他）
-  - 見積金額・請求金額
-  - 人件費
-  - レビュー（良かった点・改善点・次回申し送り）
-- 案件編集・削除
-- 案件検索（現場・日付範囲）
-
-**主要API:**
-- `listProjectsByField(fieldId)`: 現場ごとの案件一覧
-- `getProjectById(id)`: 案件詳細取得
-- `createProject(project)`: 案件作成
-- `updateProject(id, project)`: 案件更新
-- `deleteProject(id)`: 案件削除（履歴に退避）
 
 ### Phase 4: 日別作業記録・従事者稼働管理（未実装）
 
