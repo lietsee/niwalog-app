@@ -239,7 +239,7 @@ export type EmployeeHistoryRecord = {
   salaryType: SalaryType
   hourlyRate: number | null
   dailyRate: number | null
-  operationType: 'CURRENT' | 'UPDATE' | 'DELETE'
+  operationType: 'CURRENT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'RESTORE'
   operationAt: string
   operationBy: string | null
 }

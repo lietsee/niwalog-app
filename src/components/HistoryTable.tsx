@@ -55,6 +55,12 @@ function getStatusBadge(status: string) {
           新規
         </Badge>
       )
+    case 'RESTORE':
+      return (
+        <Badge className="bg-cyan-100 text-cyan-800 hover:bg-cyan-100">
+          復元
+        </Badge>
+      )
     default:
       return <Badge variant="outline">{status}</Badge>
   }

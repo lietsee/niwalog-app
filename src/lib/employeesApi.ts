@@ -315,7 +315,12 @@ export async function restoreEmployee(
       }
     }
 
-    // 3. employeesテーブルにINSERT
+    // 現在のユーザーを取得
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    // 3. employeesテーブルにINSERT（トリガーで'INSERT'が記録される）
     const { data, error } = await supabase
       .from('employees')
       .insert({
@@ -333,6 +338,20 @@ export async function restoreEmployee(
       console.error('Supabase error:', error)
       return { data: null, error: error.message, status: 400 }
     }
+
+    // 4. 履歴テーブルにRESTOREを記録（トリガーのINSERTとは別に明示的に記録）
+    await supabase.from('employees_history').insert({
+      employee_code: data.employee_code,
+      name: data.name,
+      salary_type: data.salary_type,
+      hourly_rate: data.hourly_rate,
+      daily_rate: data.daily_rate,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      created_by: data.created_by,
+      operation_type: 'RESTORE',
+      operation_by: user?.id || null,
+    })
 
     return { data, error: null, status: 200 }
   } catch (err) {
