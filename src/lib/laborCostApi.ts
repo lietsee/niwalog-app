@@ -1,5 +1,4 @@
 import { supabase } from './supabaseClient'
-import { getEmployeesByCodes } from './employeesApi'
 import type { ApiResponse, Employee, SalaryType, WorkRecord } from './types'
 
 export type LaborCostDetail = {
@@ -24,6 +23,84 @@ export type LaborCostResult = {
 
 type WorkRecordWithDate = WorkRecord & {
   work_date: string
+}
+
+/**
+ * 指定日時点での従業員給与情報を取得（履歴ベース）
+ *
+ * ロジック:
+ * 1. employees_historyから、指定日以前で最新のINSERT/UPDATE/RESTOREレコードを検索
+ * 2. 見つかればその時点の給与情報を返す
+ * 3. なければemployeesの現行データを返す（履歴がない過去データ対応）
+ * 4. 現行にもなければnull（削除済み従業員で履歴もない場合）
+ */
+async function getEmployeeAtDate(
+  employeeCode: string,
+  workDate: string
+): Promise<Employee | null> {
+  // 1. 履歴から指定日以前の最新レコードを検索
+  const { data: historyRecord } = await supabase
+    .from('employees_history')
+    .select('*')
+    .eq('employee_code', employeeCode)
+    .lte('operation_at', workDate + 'T23:59:59Z')
+    .in('operation_type', ['INSERT', 'UPDATE', 'RESTORE'])
+    .order('operation_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (historyRecord) {
+    return {
+      employee_code: historyRecord.employee_code,
+      name: historyRecord.name,
+      salary_type: historyRecord.salary_type as SalaryType,
+      hourly_rate: historyRecord.hourly_rate,
+      daily_rate: historyRecord.daily_rate,
+      created_at: historyRecord.created_at,
+      updated_at: historyRecord.updated_at,
+      created_by: historyRecord.created_by,
+    }
+  }
+
+  // 2. 履歴になければ現行テーブルを確認（後方互換性）
+  const { data: current } = await supabase
+    .from('employees')
+    .select('*')
+    .eq('employee_code', employeeCode)
+    .maybeSingle()
+
+  return current
+}
+
+/**
+ * 複数従業員の作業日ごとの給与情報を一括取得
+ *
+ * @param recordsWithDate 日付付きの作業記録
+ * @returns Map<"employee_code:work_date", Employee>
+ */
+async function getEmployeesAtDates(
+  recordsWithDate: WorkRecordWithDate[]
+): Promise<Map<string, Employee>> {
+  const result = new Map<string, Employee>()
+
+  // 従業員コードと日付の組み合わせを収集
+  const codeAndDateSet = new Set<string>()
+  for (const record of recordsWithDate) {
+    codeAndDateSet.add(`${record.employee_code}:${record.work_date}`)
+  }
+
+  // 各組み合わせについて従業員情報を取得
+  // TODO: パフォーマンス最適化の余地あり（現状はN+1問題）
+  // 案件あたりの従業員数は少数（通常1〜5名）のため許容
+  for (const key of codeAndDateSet) {
+    const [code, date] = key.split(':')
+    const employee = await getEmployeeAtDate(code, date)
+    if (employee) {
+      result.set(key, employee)
+    }
+  }
+
+  return result
 }
 
 /**
@@ -98,34 +175,38 @@ export async function calculateLaborCost(
       }
     }
 
-    // 3. 従業員マスタを取得
-    const employeesResult = await getEmployeesByCodes(Array.from(employeeCodes))
-    if (employeesResult.error || !employeesResult.data) {
-      return {
-        data: null,
-        error: employeesResult.error || '従業員情報の取得に失敗しました',
-        status: 400,
+    // 3. 作業日時点での従業員給与情報を取得（履歴ベース）
+    // key: "employee_code:work_date" → 作業日時点の従業員情報
+    const employeeAtDateMap = await getEmployeesAtDates(recordsWithDate)
+
+    // 従業員コードごとに最新の情報も保持（詳細表示用）
+    // 日付が複数ある場合は最新の作業日の情報を使用
+    const employeeMap = new Map<string, Employee>()
+    for (const record of recordsWithDate) {
+      const key = `${record.employee_code}:${record.work_date}`
+      const emp = employeeAtDateMap.get(key)
+      if (emp && !employeeMap.has(record.employee_code)) {
+        employeeMap.set(record.employee_code, emp)
       }
     }
 
-    const employeeMap = new Map<string, Employee>()
-    for (const emp of employeesResult.data) {
-      employeeMap.set(emp.employee_code, emp)
-    }
-
     // 4. 日給/月給従業員の按分計算用: その日の全案件での稼働時間を取得
-    const dailyMonthlyEmployees = employeesResult.data.filter(
-      (emp) => emp.salary_type === 'daily' || emp.salary_type === 'monthly'
-    )
+    // 時点参照で取得した従業員情報から日給/月給従業員を抽出
+    const dailyMonthlyEmployeeCodes = new Set<string>()
+    for (const [, emp] of employeeAtDateMap) {
+      if (emp.salary_type === 'daily' || emp.salary_type === 'monthly') {
+        dailyMonthlyEmployeeCodes.add(emp.employee_code)
+      }
+    }
 
     // 日付と従業員ごとの全案件稼働時間マップ
     const dailyTotalHoursMap = new Map<string, number>() // key: "employee_code:work_date"
 
-    if (dailyMonthlyEmployees.length > 0) {
+    if (dailyMonthlyEmployeeCodes.size > 0) {
       // 日給/月給従業員が稼働した日付をすべて収集
       const allDates = new Set<string>()
-      for (const emp of dailyMonthlyEmployees) {
-        const dates = datesByEmployee.get(emp.employee_code)
+      for (const code of dailyMonthlyEmployeeCodes) {
+        const dates = datesByEmployee.get(code)
         if (dates) {
           for (const d of dates) {
             allDates.add(d)
@@ -171,7 +252,7 @@ export async function calculateLaborCost(
       }
     }
 
-    // 5. 人件費を計算
+    // 5. 人件費を計算（作業日時点の給与情報を使用）
     const costByEmployee = new Map<
       string,
       { hours: number; cost: number }
@@ -179,9 +260,11 @@ export async function calculateLaborCost(
     const breakdown: LaborCostBreakdown = { hourly: 0, daily: 0, monthly: 0 }
 
     for (const record of recordsWithDate) {
-      const employee = employeeMap.get(record.employee_code)
+      // 作業日時点の従業員情報を取得
+      const key = `${record.employee_code}:${record.work_date}`
+      const employee = employeeAtDateMap.get(key)
       if (!employee) {
-        // 従業員マスタに登録がない場合はスキップ
+        // 従業員情報が取得できない場合はスキップ
         continue
       }
 
@@ -189,13 +272,12 @@ export async function calculateLaborCost(
       let cost = 0
 
       if (employee.salary_type === 'hourly') {
-        // 時給計算
+        // 時給計算（作業日時点の時給を使用）
         cost = (employee.hourly_rate ?? 0) * hours
         breakdown.hourly += cost
       } else {
-        // 日給月給/月給: 按分計算
+        // 日給月給/月給: 按分計算（作業日時点の日給を使用）
         const dailyRate = employee.daily_rate ?? 0
-        const key = `${record.employee_code}:${record.work_date}`
         const totalDayHours = dailyTotalHoursMap.get(key) || hours
 
         if (totalDayHours > 0) {
