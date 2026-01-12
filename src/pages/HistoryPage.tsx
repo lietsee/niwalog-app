@@ -16,6 +16,7 @@ import {
   getEmployeeHistory,
   getMonthlyCostHistory,
 } from '@/lib/historyApi'
+import { restoreEmployee } from '@/lib/employeesApi'
 import type {
   FieldHistoryRecord,
   ProjectHistoryRecord,
@@ -88,6 +89,24 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
     setLoading(false)
   }
 
+  // 現行従業員コードのリストを取得（復元可能判定用）
+  const currentEmployeeCodes = employeeHistory
+    .filter((e) => e.operationType === 'CURRENT')
+    .map((e) => e.employeeCode)
+
+  // 従業員復元ハンドラ
+  const handleRestoreEmployee = async (historyId: string) => {
+    const result = await restoreEmployee(historyId)
+
+    if (result.error) {
+      toast.error(`復元エラー: ${result.error}`)
+      return
+    }
+
+    toast.success('従業員を復元しました')
+    loadData() // データを再読み込み
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
@@ -145,7 +164,11 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
                 <ProjectHistoryTable data={projectHistory} />
               </TabsContent>
               <TabsContent value="employees">
-                <EmployeeHistoryTable data={employeeHistory} />
+                <EmployeeHistoryTable
+                  data={employeeHistory}
+                  currentEmployeeCodes={currentEmployeeCodes}
+                  onRestore={handleRestoreEmployee}
+                />
               </TabsContent>
               <TabsContent value="monthlyCosts">
                 <MonthlyCostHistoryTable data={monthlyCostHistory} />

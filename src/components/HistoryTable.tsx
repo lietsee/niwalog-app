@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type {
   FieldHistoryRecord,
@@ -17,6 +18,8 @@ interface ProjectHistoryTableProps {
 
 interface EmployeeHistoryTableProps {
   data: EmployeeHistoryRecord[]
+  currentEmployeeCodes: string[]
+  onRestore?: (historyId: string) => void
 }
 
 interface MonthlyCostHistoryTableProps {
@@ -184,7 +187,19 @@ function formatCostType(costType: string): string {
   return costType === 'fixed' ? '固定費' : '変動費'
 }
 
-export function EmployeeHistoryTable({ data }: EmployeeHistoryTableProps) {
+export function EmployeeHistoryTable({
+  data,
+  currentEmployeeCodes,
+  onRestore,
+}: EmployeeHistoryTableProps) {
+  // 復元可能かどうかを判定（DELETEかつ現行テーブルに同じコードが存在しない）
+  const canRestore = (row: EmployeeHistoryRecord) => {
+    return (
+      row.operationType === 'DELETE' &&
+      !currentEmployeeCodes.includes(row.employeeCode)
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -207,6 +222,7 @@ export function EmployeeHistoryTable({ data }: EmployeeHistoryTableProps) {
                   <th className="text-left py-3 px-2">給与タイプ</th>
                   <th className="text-right py-3 px-2">時給/日給</th>
                   <th className="text-left py-3 px-2">操作者</th>
+                  {onRestore && <th className="text-center py-3 px-2">操作</th>}
                 </tr>
               </thead>
               <tbody>
@@ -238,6 +254,19 @@ export function EmployeeHistoryTable({ data }: EmployeeHistoryTableProps) {
                     <td className="py-3 px-2 text-muted-foreground">
                       {row.operationBy || '-'}
                     </td>
+                    {onRestore && (
+                      <td className="py-3 px-2 text-center">
+                        {canRestore(row) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onRestore(row.historyId)}
+                          >
+                            復元
+                          </Button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
