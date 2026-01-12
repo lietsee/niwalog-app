@@ -494,7 +494,7 @@ niwalog-app/
 
 ### 5.2 履歴テーブル
 
-DELETE/UPDATE時に自動的にデータを退避する履歴テーブル。
+INSERT/UPDATE/DELETE時に自動的にデータを退避する履歴テーブル。
 
 **テーブル一覧:**
 - `fields_history`
@@ -507,10 +507,18 @@ DELETE/UPDATE時に自動的にデータを退避する履歴テーブル。
 
 **共通カラム（元テーブルのカラム + 以下）:**
 - `history_id`: UUID PRIMARY KEY（履歴ID）
-- `operation_type`: VARCHAR(10)（UPDATE or DELETE）
+- `operation_type`: VARCHAR(10)（INSERT, UPDATE, DELETE, RESTORE）
 - `operation_at`: TIMESTAMPTZ（操作日時）
 - `operation_by`: UUID（操作者）
 - `reason`: TEXT（理由・備考）
+
+**operation_type値:**
+| 値 | 説明 |
+|-----|------|
+| INSERT | 新規作成時に記録 |
+| UPDATE | 更新時に変更前データを記録 |
+| DELETE | 削除時に削除されるデータを記録 |
+| RESTORE | 復元時に記録（employees_historyのみ） |
 
 **RLSポリシー:**
 - SELECT: 全ユーザーが閲覧可能

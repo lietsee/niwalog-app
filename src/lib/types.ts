@@ -213,7 +213,7 @@ export type FieldHistoryRecord = {
   fieldName: string
   customerName: string | null
   address: string | null
-  status: 'CURRENT' | 'UPDATE' | 'DELETE'
+  status: 'CURRENT' | 'INSERT' | 'UPDATE' | 'DELETE'
   operationAt: string
   operationBy: string | null
 }
@@ -226,7 +226,7 @@ export type ProjectHistoryRecord = {
   fieldName: string
   projectNumber: number
   implementationDate: string
-  operationType: string
+  operationType: 'CURRENT' | 'INSERT' | 'UPDATE' | 'DELETE'
   operationAt: string
   operationBy: string | null
 }
@@ -253,7 +253,7 @@ export type MonthlyCostHistoryRecord = {
   category: string
   amount: number
   notes: string | null
-  operationType: 'CURRENT' | 'UPDATE' | 'DELETE'
+  operationType: 'CURRENT' | 'INSERT' | 'UPDATE' | 'DELETE'
   operationAt: string
   operationBy: string | null
 }
