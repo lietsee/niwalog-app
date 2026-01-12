@@ -7,9 +7,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   FieldHistoryTable,
   ProjectHistoryTable,
+  EmployeeHistoryTable,
+  MonthlyCostHistoryTable,
 } from '@/components/HistoryTable'
-import { getFieldHistory, getProjectHistory } from '@/lib/historyApi'
-import type { FieldHistoryRecord, ProjectHistoryRecord } from '@/lib/types'
+import {
+  getFieldHistory,
+  getProjectHistory,
+  getEmployeeHistory,
+  getMonthlyCostHistory,
+} from '@/lib/historyApi'
+import type {
+  FieldHistoryRecord,
+  ProjectHistoryRecord,
+  EmployeeHistoryRecord,
+  MonthlyCostHistoryRecord,
+} from '@/lib/types'
 
 interface HistoryPageProps {
   onNavigate: (page: 'dashboard') => void
@@ -22,6 +34,8 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
   const [projectHistory, setProjectHistory] = useState<ProjectHistoryRecord[]>(
     []
   )
+  const [employeeHistory, setEmployeeHistory] = useState<EmployeeHistoryRecord[]>([])
+  const [monthlyCostHistory, setMonthlyCostHistory] = useState<MonthlyCostHistoryRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('fields')
 
@@ -40,9 +54,11 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
   const loadData = async () => {
     setLoading(true)
 
-    const [fieldResult, projectResult] = await Promise.all([
+    const [fieldResult, projectResult, employeeResult, monthlyCostResult] = await Promise.all([
       getFieldHistory(debouncedSearch),
       getProjectHistory(debouncedSearch),
+      getEmployeeHistory(debouncedSearch),
+      getMonthlyCostHistory(debouncedSearch),
     ])
 
     if (fieldResult.error) {
@@ -55,6 +71,18 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
       toast.error(`案件履歴取得エラー: ${projectResult.error}`)
     } else {
       setProjectHistory(projectResult.data || [])
+    }
+
+    if (employeeResult.error) {
+      toast.error(`従業員履歴取得エラー: ${employeeResult.error}`)
+    } else {
+      setEmployeeHistory(employeeResult.data || [])
+    }
+
+    if (monthlyCostResult.error) {
+      toast.error(`月次経費履歴取得エラー: ${monthlyCostResult.error}`)
+    } else {
+      setMonthlyCostHistory(monthlyCostResult.data || [])
     }
 
     setLoading(false)
@@ -76,7 +104,7 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
             <div>
               <h1 className="text-2xl font-bold">変更履歴</h1>
               <p className="text-muted-foreground">
-                現場・案件の変更履歴を確認
+                データの変更履歴を確認
               </p>
             </div>
           </div>
@@ -98,8 +126,10 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
         {/* タブ */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4">
-            <TabsTrigger value="fields">現場履歴</TabsTrigger>
-            <TabsTrigger value="projects">案件履歴</TabsTrigger>
+            <TabsTrigger value="fields">現場</TabsTrigger>
+            <TabsTrigger value="projects">案件</TabsTrigger>
+            <TabsTrigger value="employees">従業員</TabsTrigger>
+            <TabsTrigger value="monthlyCosts">月次経費</TabsTrigger>
           </TabsList>
 
           {loading ? (
@@ -113,6 +143,12 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
               </TabsContent>
               <TabsContent value="projects">
                 <ProjectHistoryTable data={projectHistory} />
+              </TabsContent>
+              <TabsContent value="employees">
+                <EmployeeHistoryTable data={employeeHistory} />
+              </TabsContent>
+              <TabsContent value="monthlyCosts">
+                <MonthlyCostHistoryTable data={monthlyCostHistory} />
               </TabsContent>
             </>
           )}

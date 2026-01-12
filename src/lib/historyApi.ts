@@ -1,5 +1,11 @@
 import { supabase } from './supabaseClient'
-import type { ApiResponse, FieldHistoryRecord, ProjectHistoryRecord } from './types'
+import type {
+  ApiResponse,
+  FieldHistoryRecord,
+  ProjectHistoryRecord,
+  EmployeeHistoryRecord,
+  MonthlyCostHistoryRecord,
+} from './types'
 
 /**
  * 現場履歴取得（fields_full_historyビュー利用）
@@ -166,6 +172,194 @@ export async function getProjectHistory(
         (r) =>
           r.fieldCode.toLowerCase().includes(term) ||
           r.fieldName.toLowerCase().includes(term)
+      )
+    }
+
+    return { data: filtered.slice(0, 100), error: null, status: 200 }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    return {
+      data: null,
+      error: 'システムエラーが発生しました',
+      status: 500,
+    }
+  }
+}
+
+/**
+ * 従業員履歴取得
+ */
+export async function getEmployeeHistory(
+  searchTerm?: string
+): Promise<ApiResponse<EmployeeHistoryRecord[]>> {
+  try {
+    // 現在の従業員を取得
+    const { data: currentEmployees, error: currentError } = await supabase
+      .from('employees')
+      .select('employee_code, name, salary_type, hourly_rate, daily_rate, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(50)
+
+    if (currentError) {
+      console.error('Current employees error:', currentError)
+      return { data: null, error: currentError.message, status: 400 }
+    }
+
+    // 履歴の従業員を取得
+    const { data: historyEmployees, error: historyError } = await supabase
+      .from('employees_history')
+      .select(
+        'history_id, employee_code, name, salary_type, hourly_rate, daily_rate, operation_type, operation_at, operation_by'
+      )
+      .order('operation_at', { ascending: false })
+      .limit(50)
+
+    if (historyError) {
+      console.error('History employees error:', historyError)
+      return { data: null, error: historyError.message, status: 400 }
+    }
+
+    // 結果を統合
+    const records: EmployeeHistoryRecord[] = []
+
+    // 現在の従業員
+    for (const e of currentEmployees || []) {
+      records.push({
+        historyId: `current-${e.employee_code}`,
+        employeeCode: e.employee_code,
+        name: e.name,
+        salaryType: e.salary_type,
+        hourlyRate: e.hourly_rate,
+        dailyRate: e.daily_rate,
+        operationType: 'CURRENT',
+        operationAt: e.updated_at,
+        operationBy: null,
+      })
+    }
+
+    // 履歴の従業員
+    for (const e of historyEmployees || []) {
+      records.push({
+        historyId: e.history_id,
+        employeeCode: e.employee_code,
+        name: e.name,
+        salaryType: e.salary_type,
+        hourlyRate: e.hourly_rate,
+        dailyRate: e.daily_rate,
+        operationType: e.operation_type as 'UPDATE' | 'DELETE',
+        operationAt: e.operation_at,
+        operationBy: e.operation_by,
+      })
+    }
+
+    // 日時降順でソート
+    records.sort(
+      (a, b) => new Date(b.operationAt).getTime() - new Date(a.operationAt).getTime()
+    )
+
+    // 検索フィルター適用
+    let filtered = records
+    if (searchTerm && searchTerm.trim()) {
+      const term = searchTerm.toLowerCase()
+      filtered = records.filter(
+        (r) =>
+          r.employeeCode.toLowerCase().includes(term) ||
+          r.name.toLowerCase().includes(term)
+      )
+    }
+
+    return { data: filtered.slice(0, 100), error: null, status: 200 }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    return {
+      data: null,
+      error: 'システムエラーが発生しました',
+      status: 500,
+    }
+  }
+}
+
+/**
+ * 月次経費履歴取得
+ */
+export async function getMonthlyCostHistory(
+  searchTerm?: string
+): Promise<ApiResponse<MonthlyCostHistoryRecord[]>> {
+  try {
+    // 現在の月次経費を取得
+    const { data: currentCosts, error: currentError } = await supabase
+      .from('monthly_costs')
+      .select('id, year_month, cost_type, category, amount, notes, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(50)
+
+    if (currentError) {
+      console.error('Current monthly costs error:', currentError)
+      return { data: null, error: currentError.message, status: 400 }
+    }
+
+    // 履歴の月次経費を取得
+    const { data: historyCosts, error: historyError } = await supabase
+      .from('monthly_costs_history')
+      .select(
+        'history_id, id, year_month, cost_type, category, amount, notes, operation_type, operation_at, operation_by'
+      )
+      .order('operation_at', { ascending: false })
+      .limit(50)
+
+    if (historyError) {
+      console.error('History monthly costs error:', historyError)
+      return { data: null, error: historyError.message, status: 400 }
+    }
+
+    // 結果を統合
+    const records: MonthlyCostHistoryRecord[] = []
+
+    // 現在の月次経費
+    for (const c of currentCosts || []) {
+      records.push({
+        historyId: `current-${c.id}`,
+        id: c.id,
+        yearMonth: c.year_month,
+        costType: c.cost_type,
+        category: c.category,
+        amount: c.amount,
+        notes: c.notes,
+        operationType: 'CURRENT',
+        operationAt: c.updated_at,
+        operationBy: null,
+      })
+    }
+
+    // 履歴の月次経費
+    for (const c of historyCosts || []) {
+      records.push({
+        historyId: c.history_id,
+        id: c.id,
+        yearMonth: c.year_month,
+        costType: c.cost_type,
+        category: c.category,
+        amount: c.amount,
+        notes: c.notes,
+        operationType: c.operation_type as 'UPDATE' | 'DELETE',
+        operationAt: c.operation_at,
+        operationBy: c.operation_by,
+      })
+    }
+
+    // 日時降順でソート
+    records.sort(
+      (a, b) => new Date(b.operationAt).getTime() - new Date(a.operationAt).getTime()
+    )
+
+    // 検索フィルター適用
+    let filtered = records
+    if (searchTerm && searchTerm.trim()) {
+      const term = searchTerm.toLowerCase()
+      filtered = records.filter(
+        (r) =>
+          r.category.toLowerCase().includes(term) ||
+          r.yearMonth.includes(term)
       )
     }
 

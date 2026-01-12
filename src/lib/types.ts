@@ -231,6 +231,33 @@ export type ProjectHistoryRecord = {
   operationBy: string | null
 }
 
+// Employee History Record
+export type EmployeeHistoryRecord = {
+  historyId: string
+  employeeCode: string
+  name: string
+  salaryType: SalaryType
+  hourlyRate: number | null
+  dailyRate: number | null
+  operationType: 'CURRENT' | 'UPDATE' | 'DELETE'
+  operationAt: string
+  operationBy: string | null
+}
+
+// Monthly Cost History Record
+export type MonthlyCostHistoryRecord = {
+  historyId: string
+  id: string
+  yearMonth: string
+  costType: CostType
+  category: string
+  amount: number
+  notes: string | null
+  operationType: 'CURRENT' | 'UPDATE' | 'DELETE'
+  operationAt: string
+  operationBy: string | null
+}
+
 // Page Type for routing
 export type Page =
   | 'login'
