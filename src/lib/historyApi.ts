@@ -107,10 +107,14 @@ export async function getProjectHistory(
     }
 
     // 履歴の案件に対応する現場情報を取得
-    const historyFieldIds = [...new Set((historyProjects || []).map((p) => p.field_id))]
-    let fieldsMap: Record<string, { field_code: string; field_name: string }> = {}
+    const historyFieldIds = [
+      ...new Set((historyProjects || []).map((p) => p.field_id)),
+    ]
+    const fieldsMap: Record<string, { field_code: string; field_name: string }> =
+      {}
 
     if (historyFieldIds.length > 0) {
+      // 1. 現行の fields テーブルから取得
       const { data: fields } = await supabase
         .from('fields')
         .select('id, field_code, field_name')
@@ -120,6 +124,29 @@ export async function getProjectHistory(
         fieldsMap[field.id] = {
           field_code: field.field_code,
           field_name: field.field_name,
+        }
+      }
+
+      // 2. 取得できなかった field_id について fields_history から取得
+      const missingFieldIds = historyFieldIds.filter((id) => !fieldsMap[id])
+
+      if (missingFieldIds.length > 0) {
+        // 各 field_id について最新の履歴レコードを取得
+        for (const fieldId of missingFieldIds) {
+          const { data: historyField } = await supabase
+            .from('fields_history')
+            .select('id, field_code, field_name')
+            .eq('id', fieldId)
+            .order('operation_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          if (historyField) {
+            fieldsMap[historyField.id] = {
+              field_code: historyField.field_code,
+              field_name: historyField.field_name,
+            }
+          }
         }
       }
     }

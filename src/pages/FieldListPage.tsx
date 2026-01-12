@@ -16,8 +16,10 @@ import { FieldCard } from '@/components/FieldCard'
 import {
   listAllFields,
   searchFields,
-  deleteField,
+  deleteFieldWithCascade,
+  getFieldRelatedCounts,
   type Field,
+  type FieldRelatedCounts,
 } from '@/lib/fieldsApi'
 import { translateSupabaseError } from '@/lib/errorMessages'
 import type { Page } from '@/lib/types'
@@ -34,6 +36,10 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [fieldToDelete, setFieldToDelete] = useState<Field | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [relatedCounts, setRelatedCounts] = useState<FieldRelatedCounts | null>(
+    null
+  )
+  const [loadingCounts, setLoadingCounts] = useState(false)
 
   const loadFields = async () => {
     setLoading(true)
@@ -83,16 +89,23 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
     onNavigate('project-list', field.id)
   }
 
-  const handleDeleteClick = (field: Field) => {
+  const handleDeleteClick = async (field: Field) => {
     setFieldToDelete(field)
+    setRelatedCounts(null)
+    setLoadingCounts(true)
     setDeleteDialogOpen(true)
+
+    // 関連データ件数を取得
+    const { data } = await getFieldRelatedCounts(field.id)
+    setRelatedCounts(data)
+    setLoadingCounts(false)
   }
 
   const confirmDelete = async () => {
     if (!fieldToDelete) return
 
     setDeleting(true)
-    const { error: err } = await deleteField(fieldToDelete.id)
+    const { error: err } = await deleteFieldWithCascade(fieldToDelete.id)
 
     if (err) {
       const translatedError = translateSupabaseError(err)
@@ -102,12 +115,28 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
     } else {
       // 削除成功したらリストから除外
       setFields(fields.filter((f) => f.id !== fieldToDelete.id))
-      toast.success('現場を削除しました')
+      const hasRelated =
+        relatedCounts &&
+        (relatedCounts.projects > 0 ||
+          relatedCounts.workDays > 0 ||
+          relatedCounts.workRecords > 0 ||
+          relatedCounts.expenses > 0)
+      toast.success(
+        hasRelated ? '現場と関連データを削除しました' : '現場を削除しました'
+      )
       setDeleteDialogOpen(false)
       setFieldToDelete(null)
+      setRelatedCounts(null)
       setDeleting(false)
     }
   }
+
+  const hasRelatedData =
+    relatedCounts &&
+    (relatedCounts.projects > 0 ||
+      relatedCounts.workDays > 0 ||
+      relatedCounts.workRecords > 0 ||
+      relatedCounts.expenses > 0)
 
   if (loading && fields.length === 0) {
     return (
@@ -203,25 +232,61 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>現場を削除しますか？</DialogTitle>
-            <DialogDescription>
-              「{fieldToDelete?.field_name}」（{fieldToDelete?.field_code}
-              ）を削除します。この操作は取り消せません。
-              <br />
-              削除された現場は履歴テーブルに保存されます。
+            <DialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  「{fieldToDelete?.field_name}」（{fieldToDelete?.field_code}
+                  ）を削除します。
+                </p>
+
+                {loadingCounts && (
+                  <p className="text-muted-foreground">
+                    関連データを確認中...
+                  </p>
+                )}
+
+                {hasRelatedData && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-amber-800">
+                    <p className="font-medium mb-2">
+                      以下の関連データも一緒に削除されます:
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 text-sm">
+                      {relatedCounts!.projects > 0 && (
+                        <li>案件: {relatedCounts!.projects}件</li>
+                      )}
+                      {relatedCounts!.workDays > 0 && (
+                        <li>作業日: {relatedCounts!.workDays}件</li>
+                      )}
+                      {relatedCounts!.workRecords > 0 && (
+                        <li>従事者記録: {relatedCounts!.workRecords}件</li>
+                      )}
+                      {relatedCounts!.expenses > 0 && (
+                        <li>経費: {relatedCounts!.expenses}件</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+
+                <p className="text-sm text-muted-foreground">
+                  この操作は取り消せません。
+                  <br />
+                  削除されたデータは履歴テーブルに保存されます。
+                </p>
+              </div>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setDeleteDialogOpen(false)}
-              disabled={deleting}
+              disabled={deleting || loadingCounts}
             >
               キャンセル
             </Button>
             <Button
               variant="destructive"
               onClick={confirmDelete}
-              disabled={deleting}
+              disabled={deleting || loadingCounts}
             >
               {deleting ? '削除中...' : '削除'}
             </Button>

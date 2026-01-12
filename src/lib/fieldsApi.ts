@@ -254,3 +254,211 @@ export async function deleteField(id: string): Promise<ApiResponse<null>> {
     }
   }
 }
+
+export type FieldRelatedCounts = {
+  projects: number
+  workDays: number
+  workRecords: number
+  expenses: number
+}
+
+/**
+ * 現場に紐づく関連データ件数を取得
+ */
+export async function getFieldRelatedCounts(
+  fieldId: string
+): Promise<ApiResponse<FieldRelatedCounts>> {
+  try {
+    // 1. 関連する案件を取得
+    const { data: projects, error: projectsError } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('field_id', fieldId)
+
+    if (projectsError) {
+      console.error('Supabase error:', projectsError)
+      return { data: null, error: projectsError.message, status: 400 }
+    }
+
+    const projectCount = projects?.length || 0
+
+    if (projectCount === 0) {
+      return {
+        data: { projects: 0, workDays: 0, workRecords: 0, expenses: 0 },
+        error: null,
+        status: 200,
+      }
+    }
+
+    const projectIds = projects!.map((p) => p.id)
+
+    // 2. 関連する作業日を取得
+    const { data: workDays, error: workDaysError } = await supabase
+      .from('work_days')
+      .select('id')
+      .in('project_id', projectIds)
+
+    if (workDaysError) {
+      console.error('Supabase error:', workDaysError)
+      return { data: null, error: workDaysError.message, status: 400 }
+    }
+
+    const workDayCount = workDays?.length || 0
+    let workRecordCount = 0
+
+    if (workDayCount > 0) {
+      const workDayIds = workDays!.map((wd) => wd.id)
+
+      // 3. 関連する従事者記録をカウント
+      const { count, error: workRecordsError } = await supabase
+        .from('work_records')
+        .select('*', { count: 'exact', head: true })
+        .in('work_day_id', workDayIds)
+
+      if (workRecordsError) {
+        console.error('Supabase error:', workRecordsError)
+        return { data: null, error: workRecordsError.message, status: 400 }
+      }
+
+      workRecordCount = count || 0
+    }
+
+    // 4. 関連する経費をカウント
+    const { count: expenseCount, error: expensesError } = await supabase
+      .from('expenses')
+      .select('*', { count: 'exact', head: true })
+      .in('project_id', projectIds)
+
+    if (expensesError) {
+      console.error('Supabase error:', expensesError)
+      return { data: null, error: expensesError.message, status: 400 }
+    }
+
+    return {
+      data: {
+        projects: projectCount,
+        workDays: workDayCount,
+        workRecords: workRecordCount,
+        expenses: expenseCount || 0,
+      },
+      error: null,
+      status: 200,
+    }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    return {
+      data: null,
+      error: 'システムエラーが発生しました',
+      status: 500,
+    }
+  }
+}
+
+/**
+ * 現場とその関連データを一括削除（カスケード削除）
+ * 削除順序: work_records → work_days → expenses → projects → fields
+ * 各テーブルのトリガーにより履歴テーブルに自動退避される
+ */
+export async function deleteFieldWithCascade(
+  fieldId: string
+): Promise<ApiResponse<null>> {
+  try {
+    // 1. 関連する案件IDを取得
+    const { data: projects, error: projectsError } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('field_id', fieldId)
+
+    if (projectsError) {
+      console.error('Supabase error:', projectsError)
+      return { data: null, error: projectsError.message, status: 400 }
+    }
+
+    if (projects && projects.length > 0) {
+      const projectIds = projects.map((p) => p.id)
+
+      // 2. 関連する作業日IDを取得
+      const { data: workDays, error: workDaysError } = await supabase
+        .from('work_days')
+        .select('id')
+        .in('project_id', projectIds)
+
+      if (workDaysError) {
+        console.error('Supabase error:', workDaysError)
+        return { data: null, error: workDaysError.message, status: 400 }
+      }
+
+      if (workDays && workDays.length > 0) {
+        const workDayIds = workDays.map((wd) => wd.id)
+
+        // 3. 従事者記録を削除
+        const { error: workRecordsDeleteError } = await supabase
+          .from('work_records')
+          .delete()
+          .in('work_day_id', workDayIds)
+
+        if (workRecordsDeleteError) {
+          console.error('Supabase error:', workRecordsDeleteError)
+          return {
+            data: null,
+            error: workRecordsDeleteError.message,
+            status: 400,
+          }
+        }
+      }
+
+      // 4. 作業日を削除
+      const { error: workDaysDeleteError } = await supabase
+        .from('work_days')
+        .delete()
+        .in('project_id', projectIds)
+
+      if (workDaysDeleteError) {
+        console.error('Supabase error:', workDaysDeleteError)
+        return { data: null, error: workDaysDeleteError.message, status: 400 }
+      }
+
+      // 5. 経費を削除
+      const { error: expensesDeleteError } = await supabase
+        .from('expenses')
+        .delete()
+        .in('project_id', projectIds)
+
+      if (expensesDeleteError) {
+        console.error('Supabase error:', expensesDeleteError)
+        return { data: null, error: expensesDeleteError.message, status: 400 }
+      }
+
+      // 6. 案件を削除
+      const { error: projectsDeleteError } = await supabase
+        .from('projects')
+        .delete()
+        .eq('field_id', fieldId)
+
+      if (projectsDeleteError) {
+        console.error('Supabase error:', projectsDeleteError)
+        return { data: null, error: projectsDeleteError.message, status: 400 }
+      }
+    }
+
+    // 7. 現場を削除
+    const { error: fieldDeleteError } = await supabase
+      .from('fields')
+      .delete()
+      .eq('id', fieldId)
+
+    if (fieldDeleteError) {
+      console.error('Supabase error:', fieldDeleteError)
+      return { data: null, error: fieldDeleteError.message, status: 400 }
+    }
+
+    return { data: null, error: null, status: 200 }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    return {
+      data: null,
+      error: 'システムエラーが発生しました',
+      status: 500,
+    }
+  }
+}
