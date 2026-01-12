@@ -1107,6 +1107,101 @@ ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs;
 
 ---
 
+### Phase 9: 履歴機能強化（完了 ✅）
+
+**実装内容:**
+- 全履歴テーブルにINSERTトリガーを追加（新規作成時も履歴に記録）
+- 従業員コード重複禁止と履歴からの復元機能
+- 履歴ページに従業員・月次経費タブを追加
+- 分析ページの履歴タブを5つのサブタブに拡張
+
+**主要ファイル:**
+- `supabase/migrations/20260110000000_initial_schema.sql`: 全トリガー更新
+- `src/pages/AnalysisPage.tsx`: 履歴タブ拡張
+- `src/lib/historyApi.ts`: 従業員・月次経費履歴API追加
+- `src/lib/employeesApi.ts`: 復元機能追加
+
+**機能詳細:**
+
+#### INSERT対応トリガー
+全7テーブルの履歴トリガーがINSERT/UPDATE/DELETEに対応:
+- `fields` → `fields_history`
+- `projects` → `projects_history`
+- `work_days` → `work_days_history`
+- `work_records` → `work_records_history`
+- `expenses` → `expenses_history`
+- `employees` → `employees_history`
+- `monthly_costs` → `monthly_costs_history`
+
+**トリガー仕様:**
+- AFTER INSERT OR UPDATE OR DELETE ON [table]
+- SECURITY DEFINER（auth.uid()を正しく取得）
+- operation_type: 'INSERT', 'UPDATE', 'DELETE', 'RESTORE'
+
+#### 従業員コード重複禁止と復元機能
+- 従業員コードはUNIQUE制約により重複不可
+- 削除済み従業員のコードを再使用しようとするとエラー
+- 履歴から削除済み従業員を復元する機能を追加
+  - `restoreEmployee(employeeCode)`: 最新のDELETE履歴から復元
+  - 復元時はoperation_type='RESTORE'で履歴に記録
+
+#### 分析ページ履歴タブ
+5つのサブタブで履歴を表示:
+- 現場履歴
+- 案件履歴
+- 作業日履歴
+- 従業員履歴（新規）
+- 月次経費履歴（新規）
+
+各履歴で操作種別バッジ（INSERT/UPDATE/DELETE/RESTORE）を表示
+
+---
+
+### Phase 10: 人件費計算の履歴ベース化（完了 ✅）
+
+**実装内容:**
+- 人件費計算時に作業日時点の従業員給与情報を使用
+- 削除済み従業員の人件費も計算可能
+- 給与変更後の過去案件再計算時も当時の給与で計算
+
+**主要ファイル:**
+- `src/lib/laborCostApi.ts`: 時点参照機能追加
+- `supabase/migrations/20260110000000_initial_schema.sql`: インデックス追加
+
+**機能詳細:**
+
+#### 時点参照関数
+
+**getEmployeeAtDate(employeeCode, workDate):**
+指定日時点での従業員給与情報を取得
+
+ロジック:
+1. `employees_history`から、指定日以前で最新のINSERT/UPDATE/RESTOREレコードを検索
+2. 見つかればその時点の給与情報を返す
+3. なければ`employees`の現行データを返す（後方互換性）
+4. 現行にもなければnull（削除済み従業員で履歴もない場合）
+
+**getEmployeesAtDates(recordsWithDate):**
+複数従業員の作業日ごとの給与情報を一括取得
+
+#### 人件費計算の変更点
+- 従来: `employees`テーブルから現在の給与情報を取得
+- 変更後: `employees_history`から作業日時点の給与情報を取得
+
+**メリット:**
+- 従業員の給与変更後、過去の案件で人件費再計算しても当時の給与で計算
+- 削除済み従業員の人件費も計算可能（履歴から給与情報を取得）
+- 後方互換性あり（履歴がない従業員は現行テーブルから取得）
+
+#### パフォーマンス最適化
+人件費計算の時点参照用複合インデックスを追加:
+```sql
+CREATE INDEX idx_employees_history_code_operation
+ON employees_history(employee_code, operation_at DESC);
+```
+
+---
+
 ## 未実装機能
 
 ### カスケード削除機能（将来実装予定）
@@ -1263,10 +1358,11 @@ INSERT INTO fields (id, field_code, field_name, ...) VALUES
 **ブランチ:** main
 
 **コミット履歴（最新）:**
-- 月次経費管理機能（固定費・変動費）を実装
-- ダッシュボードに固定費・変動費・粗利表示を追加
-- 従業員管理を履歴テーブル方式に変更（is_active削除）
-- 月別グラフに固定費・変動費を追加
+- 人件費計算の履歴ベース化と履歴トリガーの統合
+- 全履歴テーブルにINSERTトリガーを追加
+- 履歴の完全性強化（INSERT/RESTORE対応）
+- 従業員コード重複禁止 + 履歴からの復元機能
+- 履歴ページに従業員・月次経費タブを追加
 
 ---
 
