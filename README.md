@@ -686,6 +686,10 @@ ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs;
 - 削除確認ダイアログ
 - ローディング表示
 - エラー表示
+- **財務サマリー表示**: 各現場カードに請求額合計・費用合計を表示
+  - 請求額合計（緑色）: 全案件のinvoice_amount合計
+  - 費用合計（赤色）: Σ(人件費 + 経費) + (片道移動費 × 2 × 案件数)
+  - 人件費未設定の案件がある場合は「?」アイコンを表示（クリックで警告メッセージ）
 
 #### 現場作成・編集（FieldFormPage）
 - フォームセクション:
@@ -707,6 +711,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs;
 - `createField(field)`: 現場作成（created_byを自動設定）
 - `updateField(id, field)`: 現場更新
 - `deleteField(id)`: 現場削除（履歴に自動退避）
+- `getFieldFinancialSummaries(fields)`: 現場の財務サマリー一括取得（請求額・費用合計・人件費未設定フラグ）
 
 #### エラーハンドリング
 - Supabaseエラーの日本語翻訳
