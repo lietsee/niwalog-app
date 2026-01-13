@@ -1,6 +1,43 @@
 import { supabase } from './supabaseClient'
 import type { ApiResponse, Employee, SalaryType, WorkRecord } from './types'
 
+// 月キー（営業日数テーブル用）
+const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'] as const
+type MonthKey = typeof MONTH_KEYS[number]
+
+/**
+ * 指定年月の営業日数情報を取得
+ * @param year 年
+ * @param month 月 (0-11)
+ * @returns 営業日数と臨時休業日数、またはデータがない場合はnull
+ */
+async function getBusinessDaysForMonth(
+  year: number,
+  month: number
+): Promise<{ workingDays: number; temporaryClosure: number } | null> {
+  const { data } = await supabase
+    .from('business_days')
+    .select('*')
+    .eq('year', year)
+
+  if (!data || data.length === 0) {
+    return null
+  }
+
+  const monthKey = MONTH_KEYS[month] as MonthKey
+  const workingDaysRecord = data.find(d => d.day_type === 'working_days')
+  const closureRecord = data.find(d => d.day_type === 'temporary_closure')
+
+  if (!workingDaysRecord) {
+    return null
+  }
+
+  return {
+    workingDays: (workingDaysRecord[monthKey] as number) ?? 0,
+    temporaryClosure: (closureRecord?.[monthKey] as number) ?? 0,
+  }
+}
+
 export type LaborCostDetail = {
   employee_code: string
   name: string
@@ -275,8 +312,8 @@ export async function calculateLaborCost(
         // 時給計算（作業日時点の時給を使用）
         cost = (employee.hourly_rate ?? 0) * hours
         breakdown.hourly += cost
-      } else {
-        // 日給月給/月給: 按分計算（作業日時点の日給を使用）
+      } else if (employee.salary_type === 'daily') {
+        // 日給月給: 按分計算（作業日時点の日給を使用）
         const dailyRate = employee.daily_rate ?? 0
         const totalDayHours = dailyTotalHoursMap.get(key) || hours
 
@@ -285,12 +322,40 @@ export async function calculateLaborCost(
           const ratio = hours / totalDayHours
           cost = dailyRate * ratio
         }
+        breakdown.daily += cost
+      } else if (employee.salary_type === 'monthly') {
+        // 月給: 月給を営業日数で割って日給を算出、按分計算
+        const monthlyRate = employee.daily_rate ?? 0 // DBには月給がdaily_rateに保存される
+        const workDate = new Date(record.work_date)
+        const year = workDate.getFullYear()
+        const month = workDate.getMonth() // 0-11
 
-        if (employee.salary_type === 'daily') {
-          breakdown.daily += cost
-        } else {
-          breakdown.monthly += cost
+        // 営業日数データを取得
+        const businessDays = await getBusinessDaysForMonth(year, month)
+
+        if (!businessDays) {
+          // 営業日数データがない場合はスキップ（計算しない）
+          continue
         }
+
+        const { workingDays, temporaryClosure } = businessDays
+        const actualWorkingDays = workingDays - temporaryClosure
+
+        if (actualWorkingDays <= 0) {
+          // 実働日数が0以下の場合はスキップ
+          continue
+        }
+
+        // 月給から日給を計算
+        const dailyRate = monthlyRate / actualWorkingDays
+        const totalDayHours = dailyTotalHoursMap.get(key) || hours
+
+        if (totalDayHours > 0) {
+          // その日の稼働時間に対するこの案件の割合
+          const ratio = hours / totalDayHours
+          cost = dailyRate * ratio
+        }
+        breakdown.monthly += cost
       }
 
       // 従業員ごとの集計

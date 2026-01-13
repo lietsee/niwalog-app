@@ -254,7 +254,7 @@ export function EmployeeFormPage({ onNavigate, employeeCode }: EmployeeFormPageP
                 </div>
               )}
 
-              {(salaryType === 'daily' || salaryType === 'monthly') && (
+              {salaryType === 'daily' && (
                 <div className="space-y-2">
                   <Label htmlFor="daily_rate">
                     日給（円） <span className="text-destructive">*</span>
@@ -268,6 +268,31 @@ export function EmployeeFormPage({ onNavigate, employeeCode }: EmployeeFormPageP
                   />
                   <p className="text-xs text-muted-foreground">
                     同じ日に複数案件に従事した場合、稼働時間の割合で按分されます
+                  </p>
+                  {errors.daily_rate && (
+                    <p className="text-sm text-destructive">
+                      {errors.daily_rate.message}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {salaryType === 'monthly' && (
+                <div className="space-y-2">
+                  <Label htmlFor="daily_rate">
+                    月給（円） <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="daily_rate"
+                    type="number"
+                    {...register('daily_rate')}
+                    placeholder="例: 300000"
+                    min={0}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    同じ日に複数案件に従事した場合、稼働時間の割合で按分されます
+                    <br />
+                    会社負担分の社保料等を加算した金額を入力するとより具体的な計算結果となります。
                   </p>
                   {errors.daily_rate && (
                     <p className="text-sm text-destructive">
