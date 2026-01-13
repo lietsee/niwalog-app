@@ -42,6 +42,19 @@ const PRIMARY_KEY_MAP: Record<TableName, string> = {
   expenses: 'id',
 }
 
+// UNIQUE constraints for each table (excluding primary key)
+// Used to check for conflicts in restore mode
+const UNIQUE_CONSTRAINT_MAP: Record<TableName, string[]> = {
+  employees: [], // employee_code is PK
+  business_days: [], // Composite unique (year, day_type) - handled separately
+  monthly_costs: [],
+  fields: ['field_code'],
+  projects: [],
+  work_days: [], // Composite unique (project_id, work_date) - FK handles this
+  work_records: [],
+  expenses: [],
+}
+
 // NDJSON record with metadata
 type NDJSONRecord = {
   _table: TableName
@@ -336,18 +349,50 @@ export async function importFromNDJSON(
             data = remapForeignKeys(tableName, data, idMapping)
           }
 
-          // Restore mode: check if already exists
+          // Restore mode: check if already exists (PK and UNIQUE constraints)
           if (mode === 'restore') {
             const pkValue = data[primaryKey]
-            const { data: existing } = await supabase
+
+            // Check PK
+            const { data: existingByPk } = await supabase
               .from(tableName)
               .select(primaryKey)
               .eq(primaryKey, pkValue)
               .maybeSingle()
 
-            if (existing) {
+            if (existingByPk) {
               skipped[tableName]++
               continue
+            }
+
+            // Check UNIQUE constraints
+            const uniqueColumns = UNIQUE_CONSTRAINT_MAP[tableName]
+            if (uniqueColumns.length > 0) {
+              let uniqueQuery = supabase.from(tableName).select(primaryKey)
+              for (const col of uniqueColumns) {
+                uniqueQuery = uniqueQuery.eq(col, data[col])
+              }
+              const { data: existingByUnique } = await uniqueQuery.maybeSingle()
+
+              if (existingByUnique) {
+                skipped[tableName]++
+                continue
+              }
+            }
+
+            // Check composite unique for business_days (year, day_type)
+            if (tableName === 'business_days') {
+              const { data: existingBd } = await supabase
+                .from('business_days')
+                .select('id')
+                .eq('year', data.year)
+                .eq('day_type', data.day_type)
+                .maybeSingle()
+
+              if (existingBd) {
+                skipped[tableName]++
+                continue
+              }
             }
           }
 
@@ -430,16 +475,46 @@ export async function importFromNDJSON(
             continue
           }
 
-          // Check if record exists
-          const { data: existing } = await supabase
+          // Check if record exists by PK
+          const { data: existingByPk } = await supabase
             .from(tableName)
             .select(primaryKey)
             .eq(primaryKey, pkValue)
             .maybeSingle()
 
-          if (existing) {
+          if (existingByPk) {
             skipped[tableName]++
             continue
+          }
+
+          // Check UNIQUE constraints (for restore mode)
+          const uniqueColumns = UNIQUE_CONSTRAINT_MAP[tableName]
+          if (uniqueColumns.length > 0) {
+            let uniqueQuery = supabase.from(tableName).select(primaryKey)
+            for (const col of uniqueColumns) {
+              uniqueQuery = uniqueQuery.eq(col, data[col])
+            }
+            const { data: existingByUnique } = await uniqueQuery.maybeSingle()
+
+            if (existingByUnique) {
+              skipped[tableName]++
+              continue
+            }
+          }
+
+          // Check composite unique for business_days (year, day_type)
+          if (tableName === 'business_days') {
+            const { data: existingBd } = await supabase
+              .from('business_days')
+              .select('id')
+              .eq('year', data.year)
+              .eq('day_type', data.day_type)
+              .maybeSingle()
+
+            if (existingBd) {
+              skipped[tableName]++
+              continue
+            }
           }
 
           // Insert new record

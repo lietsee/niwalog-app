@@ -1292,16 +1292,6 @@ ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs_history;
 ALTER PUBLICATION supabase_realtime ADD TABLE business_days_history;
 
 -- ============================================================================
--- サンプルデータ（テスト用）
--- ============================================================================
-
--- 現場マスタのサンプル
-INSERT INTO fields (field_code, field_name, customer_name, address, has_electricity, has_water, has_toilet, toilet_distance, travel_distance_km, travel_time_minutes, travel_cost, notes, warnings)
-VALUES
-  ('NG-0007', '下郷', '下郷様', '愛知県XX市YY町', true, false, false, '徒歩5分', 15.5, 25, 1200, '現場が広い', '過去に赤字案件'),
-  ('KT-0003', '渡辺', '渡辺様', '愛知県XX市ZZ町', true, true, true, '現場内', 8.0, 15, 800, NULL, NULL);
-
--- ============================================================================
 -- ビュー: 履歴を含む完全なデータ表示
 -- ============================================================================
 
