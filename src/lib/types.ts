@@ -310,3 +310,4 @@ export type Page =
   | 'business-days'
   | 'analysis'
   | 'history'
+  | 'data-management'

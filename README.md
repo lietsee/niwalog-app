@@ -1360,27 +1360,92 @@ ON employees_history(employee_code, operation_at DESC);
 
 ---
 
+### Phase 13: NDJSONインポート・エクスポート機能（完了 ✅）
+
+**実装内容:**
+- 全データのJSON Lines形式（NDJSON）エクスポート
+- NDJSONファイルからのインポート（復元モード/追加モード）
+- インポート時のエラー処理選択（部分インポート/ロールバック）
+- 別環境からのデータ移行対応（UUID再生成・外部キー自動置換）
+
+**主要ファイル:**
+- `src/pages/DataManagementPage.tsx`: データ管理ページ
+- `src/lib/ndjsonApi.ts`: NDJSON操作API
+
+**機能詳細:**
+
+#### データ管理ページ（DataManagementPage）
+ダッシュボードから「データ管理」ボタンでアクセス。
+
+**エクスポート:**
+- 全8テーブルのデータをNDJSON形式でダウンロード
+- ファイル名: `niwalog_backup_YYYY-MM-DD.ndjson`
+- 各行に `_table`（テーブル名）と `_version`（スキーマバージョン）を付与
+
+**インポート:**
+- `.ndjson`/`.jsonl`/`.json`ファイルを選択
+- ファイル内容のプレビュー表示（テーブルごとの件数）
+- インポートモード選択
+- エラー処理選択
+- インポート結果の詳細表示（追加/スキップ/エラー件数）
+
+#### インポートモード
+
+| モード | 説明 | ユースケース |
+|--------|------|-------------|
+| 復元モード | 同じIDでデータを復元。既存データはスキップ | バックアップからの復元 |
+| 追加モード | 新しいUUIDを生成して追加。外部キーも自動置換 | 別環境からの移行 |
+
+**追加モードの動作:**
+1. 全レコードに新しいUUIDを生成（employees.employee_codeは除く）
+2. 旧ID→新IDのマッピングを作成
+3. 親テーブルから順にインポート
+4. 子テーブルの外部キーを新IDに自動置換
+
+#### エラー処理
+
+| 処理 | 説明 | 処理方式 |
+|------|------|---------|
+| 部分インポート | エラーをスキップして継続。成功分は残る | 1件ずつ処理 |
+| ロールバック | エラー時は全て取り消し。データ整合性を保証 | バルク処理 |
+
+**ロールバック処理:**
+- エラー発生時、挿入済みレコードを外部キー制約の逆順で削除
+- 削除順序: expenses → work_records → work_days → projects → fields → monthly_costs → business_days → employees
+
+#### NDJSON形式
+
+```json
+{"_table":"employees","_version":1,"employee_code":"f001","name":"山田太郎",...}
+{"_table":"fields","_version":1,"id":"uuid-xxx","field_code":"KT-001",...}
+{"_table":"projects","_version":1,"id":"uuid-yyy","field_id":"uuid-xxx",...}
+```
+
+**対象テーブル（インポート順序）:**
+1. employees（独立）
+2. business_days（独立）
+3. monthly_costs（独立）
+4. fields（独立）
+5. projects（← fields）
+6. work_days（← projects）
+7. work_records（← work_days）
+8. expenses（← projects）
+
+#### API層（ndjsonApi.ts）
+- `exportAllToNDJSON()`: 全データをNDJSON形式でエクスポート
+- `importFromNDJSON(content, options)`: NDJSONファイルからインポート
+- `downloadNDJSON(content, filename?)`: NDJSONをファイルとしてダウンロード
+- `getRecordCounts(content)`: ファイル内のレコード件数をプレビュー
+
+---
+
 ## 未実装機能
 
-### データインポート機能
-
-#### 現場インポート
-- CSV/Excel形式からの一括インポート
-- フィールドマッピング機能
-- バリデーションとエラーレポート
-
-#### 案件インポート
-- CSV/Excel形式からの一括インポート
-- 既存現場との紐付け
-- 作業日・従事者記録の一括登録
-
-### その他の未実装機能
-
-#### エクスポート機能拡張
+### エクスポート機能拡張
 - Excel形式エクスポート
 - レポート印刷機能（PDF出力）
 
-#### 分析機能拡張
+### 分析機能拡張
 - 移動費率分析
 - 案件数推移グラフ
 - 従業員別稼働分析（期間指定）

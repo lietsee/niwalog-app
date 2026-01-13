@@ -16,6 +16,7 @@ import { AnalysisPage } from '@/pages/AnalysisPage'
 import { HistoryPage } from '@/pages/HistoryPage'
 import { MonthlyCostPage } from '@/pages/MonthlyCostPage'
 import { BusinessDaysPage } from '@/pages/BusinessDaysPage'
+import { DataManagementPage } from '@/pages/DataManagementPage'
 import type { Page } from '@/lib/types'
 
 const NAV_STATE_KEY = 'niwalog_nav_state'
@@ -260,6 +261,9 @@ function App() {
         )}
         {currentPage === 'business-days' && (
           <BusinessDaysPage onNavigate={handleNavigate} />
+        )}
+        {currentPage === 'data-management' && (
+          <DataManagementPage onNavigate={handleNavigate} />
         )}
       </div>
       <Toaster position="top-center" closeButton />
