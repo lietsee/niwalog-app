@@ -18,11 +18,12 @@ import {
   searchFields,
   deleteFieldWithCascade,
   getFieldRelatedCounts,
+  getFieldFinancialSummaries,
   type Field,
   type FieldRelatedCounts,
 } from '@/lib/fieldsApi'
 import { translateSupabaseError } from '@/lib/errorMessages'
-import type { Page } from '@/lib/types'
+import type { Page, FieldFinancialSummary } from '@/lib/types'
 
 interface FieldListPageProps {
   onNavigate: (page: Page, fieldId?: string) => void
@@ -40,6 +41,9 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
     null
   )
   const [loadingCounts, setLoadingCounts] = useState(false)
+  const [financialSummaries, setFinancialSummaries] = useState<Map<string, FieldFinancialSummary>>(
+    new Map()
+  )
 
   const loadFields = async () => {
     setLoading(true)
@@ -51,6 +55,13 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
       toast.error(`読み込みに失敗しました: ${err}`)
     } else {
       setFields(data || [])
+      // 財務サマリーを取得
+      if (data && data.length > 0) {
+        const { data: summaries } = await getFieldFinancialSummaries(data)
+        if (summaries) {
+          setFinancialSummaries(summaries)
+        }
+      }
     }
     setLoading(false)
   }
@@ -76,6 +87,15 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
       toast.error(`検索に失敗しました: ${err}`)
     } else {
       setFields(data || [])
+      // 財務サマリーを取得
+      if (data && data.length > 0) {
+        const { data: summaries } = await getFieldFinancialSummaries(data)
+        if (summaries) {
+          setFinancialSummaries(summaries)
+        }
+      } else {
+        setFinancialSummaries(new Map())
+      }
     }
 
     setLoading(false)
@@ -218,6 +238,7 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
               <FieldCard
                 key={field.id}
                 field={field}
+                financialSummary={financialSummaries.get(field.id)}
                 onEdit={handleEdit}
                 onDelete={handleDeleteClick}
                 onClick={handleCardClick}

@@ -205,6 +205,15 @@ export type RecentProject = {
   invoiceAmount: number | null
 }
 
+// Field Financial Summary (現場財務サマリー)
+export type FieldFinancialSummary = {
+  fieldId: string
+  totalInvoice: number        // 請求額合計
+  totalCost: number           // 費用合計
+  hasUnsetLaborCost: boolean  // 人件費未設定の案件があるか
+  projectCount: number        // 案件数
+}
+
 // Field Profitability Report
 export type FieldProfitabilityReport = {
   fieldId: string

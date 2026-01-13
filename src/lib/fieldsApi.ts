@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient'
-import type { ApiResponse } from './types'
+import type { ApiResponse, FieldFinancialSummary } from './types'
 
 export type Field = {
   id: string
@@ -453,6 +453,90 @@ export async function deleteFieldWithCascade(
     }
 
     return { data: null, error: null, status: 200 }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    return {
+      data: null,
+      error: 'システムエラーが発生しました',
+      status: 500,
+    }
+  }
+}
+
+/**
+ * 現場の財務サマリーを一括取得
+ * - 請求額合計
+ * - 費用合計（人件費 + 経費 + 移動費*2*案件数）
+ * - 人件費未設定フラグ
+ */
+export async function getFieldFinancialSummaries(
+  fields: Field[]
+): Promise<ApiResponse<Map<string, FieldFinancialSummary>>> {
+  try {
+    if (fields.length === 0) {
+      return { data: new Map(), error: null, status: 200 }
+    }
+
+    const fieldIds = fields.map((f) => f.id)
+
+    // 全現場の案件を一括取得
+    const { data: projects, error: projectsError } = await supabase
+      .from('projects')
+      .select('id, field_id, invoice_amount, labor_cost, expense_total')
+      .in('field_id', fieldIds)
+
+    if (projectsError) {
+      console.error('Supabase error:', projectsError)
+      return { data: null, error: projectsError.message, status: 400 }
+    }
+
+    // 現場ごとのtravel_costマップを作成
+    const travelCostMap = new Map<string, number | null>()
+    for (const field of fields) {
+      travelCostMap.set(field.id, field.travel_cost)
+    }
+
+    // 現場ごとに集計
+    const summaryMap = new Map<string, FieldFinancialSummary>()
+
+    // 初期化（案件がない現場も含む）
+    for (const field of fields) {
+      summaryMap.set(field.id, {
+        fieldId: field.id,
+        totalInvoice: 0,
+        totalCost: 0,
+        hasUnsetLaborCost: false,
+        projectCount: 0,
+      })
+    }
+
+    // 案件データを集計
+    if (projects) {
+      for (const project of projects) {
+        const summary = summaryMap.get(project.field_id)
+        if (!summary) continue
+
+        const travelCost = travelCostMap.get(project.field_id) ?? 0
+
+        // 請求額合計
+        summary.totalInvoice += project.invoice_amount ?? 0
+
+        // 費用合計: labor_cost + expense_total + travel_cost*2
+        const laborCost = project.labor_cost ?? 0
+        const expenseTotal = project.expense_total ?? 0
+        summary.totalCost += laborCost + expenseTotal + travelCost * 2
+
+        // 人件費未設定チェック
+        if (project.labor_cost === null) {
+          summary.hasUnsetLaborCost = true
+        }
+
+        // 案件数
+        summary.projectCount += 1
+      }
+    }
+
+    return { data: summaryMap, error: null, status: 200 }
   } catch (err) {
     console.error('Unexpected error:', err)
     return {

@@ -1,17 +1,20 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Pencil, Trash2, MapPin, User } from 'lucide-react'
+import { Pencil, Trash2, MapPin, User, HelpCircle } from 'lucide-react'
+import { toast } from 'sonner'
 import type { Field } from '@/lib/fieldsApi'
+import type { FieldFinancialSummary } from '@/lib/types'
 
 interface FieldCardProps {
   field: Field
+  financialSummary?: FieldFinancialSummary
   onEdit: (field: Field) => void
   onDelete: (field: Field) => void
   onClick?: (field: Field) => void
 }
 
-export function FieldCard({ field, onEdit, onDelete, onClick }: FieldCardProps) {
+export function FieldCard({ field, financialSummary, onEdit, onDelete, onClick }: FieldCardProps) {
   const handleCardClick = () => {
     onClick?.(field)
   }
@@ -19,6 +22,15 @@ export function FieldCard({ field, onEdit, onDelete, onClick }: FieldCardProps) 
   const handleButtonClick = (e: React.MouseEvent, action: () => void) => {
     e.stopPropagation()
     action()
+  }
+
+  const handleLaborCostWarningClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    toast.info('人件費が計算されていない案件があります')
+  }
+
+  const formatCurrency = (value: number) => {
+    return `¥${value.toLocaleString()}`
   }
 
   return (
@@ -89,6 +101,31 @@ export function FieldCard({ field, onEdit, onDelete, onClick }: FieldCardProps) 
             <div className="text-xs text-muted-foreground pt-2 border-t">
               移動距離: {field.travel_distance_km}km
               {field.travel_time_minutes && ` (${field.travel_time_minutes}分)`}
+            </div>
+          )}
+          {financialSummary && financialSummary.projectCount > 0 && (
+            <div className="pt-2 border-t space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">請求額合計</span>
+                <span className="font-medium text-green-600">
+                  {formatCurrency(financialSummary.totalInvoice)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">費用合計</span>
+                <span className="font-medium text-red-600 flex items-center gap-1">
+                  {formatCurrency(financialSummary.totalCost)}
+                  {financialSummary.hasUnsetLaborCost && (
+                    <button
+                      onClick={handleLaborCostWarningClick}
+                      className="text-amber-500 hover:text-amber-600"
+                      title="人件費が計算されていない案件があります"
+                    >
+                      <HelpCircle className="h-4 w-4" />
+                    </button>
+                  )}
+                </span>
+              </div>
             </div>
           )}
         </div>
