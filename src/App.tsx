@@ -15,6 +15,7 @@ import { EmployeeFormPage } from '@/pages/EmployeeFormPage'
 import { AnalysisPage } from '@/pages/AnalysisPage'
 import { HistoryPage } from '@/pages/HistoryPage'
 import { MonthlyCostPage } from '@/pages/MonthlyCostPage'
+import { BusinessDaysPage } from '@/pages/BusinessDaysPage'
 import type { Page } from '@/lib/types'
 
 function App() {
@@ -180,6 +181,9 @@ function App() {
         )}
         {currentPage === 'monthly-cost' && (
           <MonthlyCostPage onNavigate={handleNavigate} />
+        )}
+        {currentPage === 'business-days' && (
+          <BusinessDaysPage onNavigate={handleNavigate} />
         )}
       </div>
       <Toaster position="top-right" />

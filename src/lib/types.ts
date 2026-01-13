@@ -117,6 +117,32 @@ export type Employee = {
 // CostType (経費種別)
 export type CostType = 'fixed' | 'variable'
 
+// DayType (日数タイプ)
+export type DayType = 'working_days' | 'temporary_closure'
+
+// BusinessDay (営業日数)
+export type BusinessDay = {
+  id: string
+  year: number
+  day_type: DayType
+  jan: number
+  feb: number
+  mar: number
+  apr: number
+  may: number
+  jun: number
+  jul: number
+  aug: number
+  sep: number
+  oct: number
+  nov: number
+  dec: number
+  notes: string | null
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
 // MonthlyCost (月次経費)
 export type MonthlyCost = {
   id: string
@@ -272,5 +298,6 @@ export type Page =
   | 'employee-list'
   | 'employee-form'
   | 'monthly-cost'
+  | 'business-days'
   | 'analysis'
   | 'history'

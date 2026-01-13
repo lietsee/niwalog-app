@@ -1108,6 +1108,166 @@ FOR EACH ROW
 EXECUTE FUNCTION archive_monthly_costs_to_history();
 
 -- ============================================================================
+-- 8. business_days（営業日数）
+-- ============================================================================
+-- 年間の月別営業日数と臨時休業日数を管理
+-- 月給従業員の1日あたりの日給計算に使用（月給/営業日数）
+
+CREATE TABLE business_days (
+  -- 主キー
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- 対象年
+  year INTEGER NOT NULL,                    -- 対象年（例: 2026）
+
+  -- 日数タイプ
+  day_type VARCHAR(20) NOT NULL CHECK (day_type IN ('working_days', 'temporary_closure')),
+                                            -- working_days=予定営業日数, temporary_closure=臨時休業日数
+
+  -- 各月の日数
+  jan INTEGER NOT NULL DEFAULT 0,           -- 1月
+  feb INTEGER NOT NULL DEFAULT 0,           -- 2月
+  mar INTEGER NOT NULL DEFAULT 0,           -- 3月
+  apr INTEGER NOT NULL DEFAULT 0,           -- 4月
+  may INTEGER NOT NULL DEFAULT 0,           -- 5月
+  jun INTEGER NOT NULL DEFAULT 0,           -- 6月
+  jul INTEGER NOT NULL DEFAULT 0,           -- 7月
+  aug INTEGER NOT NULL DEFAULT 0,           -- 8月
+  sep INTEGER NOT NULL DEFAULT 0,           -- 9月
+  oct INTEGER NOT NULL DEFAULT 0,           -- 10月
+  nov INTEGER NOT NULL DEFAULT 0,           -- 11月
+  dec INTEGER NOT NULL DEFAULT 0,           -- 12月
+
+  -- 備考
+  notes TEXT,                               -- 備考
+
+  -- メタデータ
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID REFERENCES auth.users(id),
+
+  -- 複合ユニーク制約（年とタイプの組み合わせで一意）
+  UNIQUE(year, day_type)
+);
+
+-- インデックス
+CREATE INDEX idx_business_days_year ON business_days(year);
+CREATE INDEX idx_business_days_year_type ON business_days(year, day_type);
+
+-- コメント
+COMMENT ON TABLE business_days IS '営業日数: 年間の月別営業日数・臨時休業日数を管理';
+COMMENT ON COLUMN business_days.year IS '対象年（例: 2026）';
+COMMENT ON COLUMN business_days.day_type IS '日数タイプ: working_days=予定営業日数, temporary_closure=臨時休業日数';
+
+-- RLS
+ALTER TABLE business_days ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated users can manage business_days" ON business_days FOR ALL USING (auth.role() = 'authenticated');
+
+-- updated_at自動更新トリガー
+CREATE TRIGGER update_business_days_updated_at
+BEFORE UPDATE ON business_days
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- 8-H. business_days_history（営業日数履歴）
+-- ============================================================================
+
+CREATE TABLE business_days_history (
+  history_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- 元のレコード情報
+  id UUID NOT NULL,
+  year INTEGER NOT NULL,
+  day_type VARCHAR(20) NOT NULL,
+  jan INTEGER NOT NULL,
+  feb INTEGER NOT NULL,
+  mar INTEGER NOT NULL,
+  apr INTEGER NOT NULL,
+  may INTEGER NOT NULL,
+  jun INTEGER NOT NULL,
+  jul INTEGER NOT NULL,
+  aug INTEGER NOT NULL,
+  sep INTEGER NOT NULL,
+  oct INTEGER NOT NULL,
+  nov INTEGER NOT NULL,
+  dec INTEGER NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  created_by UUID,
+
+  -- 履歴管理情報
+  operation_type VARCHAR(10) NOT NULL,     -- 'INSERT', 'UPDATE', 'DELETE'
+  operation_at TIMESTAMPTZ DEFAULT NOW(),
+  operation_by UUID REFERENCES auth.users(id),
+  reason TEXT
+);
+
+-- インデックス
+CREATE INDEX idx_business_days_history_id ON business_days_history(id);
+CREATE INDEX idx_business_days_history_year ON business_days_history(year);
+CREATE INDEX idx_business_days_history_operation_at ON business_days_history(operation_at DESC);
+
+-- コメント
+COMMENT ON TABLE business_days_history IS '営業日数履歴: 削除・更新・新規作成された営業日数情報を保管';
+COMMENT ON COLUMN business_days_history.operation_type IS '操作種別: INSERT（新規作成）, UPDATE（更新前の状態）, DELETE（削除されたレコード）';
+
+-- RLS
+ALTER TABLE business_days_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view business_days history" ON business_days_history FOR SELECT USING (true);
+CREATE POLICY "System can archive business_days history" ON business_days_history FOR INSERT WITH CHECK (true);
+
+-- 履歴テーブルへの自動退避トリガー
+CREATE OR REPLACE FUNCTION archive_business_days_to_history()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO business_days_history (
+      id, year, day_type, jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec,
+      notes, created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      NEW.id, NEW.year, NEW.day_type, NEW.jan, NEW.feb, NEW.mar, NEW.apr, NEW.may, NEW.jun,
+      NEW.jul, NEW.aug, NEW.sep, NEW.oct, NEW.nov, NEW.dec,
+      NEW.notes, NEW.created_at, NEW.updated_at, NEW.created_by,
+      'INSERT', auth.uid()
+    );
+    RETURN NEW;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO business_days_history (
+      id, year, day_type, jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec,
+      notes, created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.year, OLD.day_type, OLD.jan, OLD.feb, OLD.mar, OLD.apr, OLD.may, OLD.jun,
+      OLD.jul, OLD.aug, OLD.sep, OLD.oct, OLD.nov, OLD.dec,
+      OLD.notes, OLD.created_at, OLD.updated_at, OLD.created_by,
+      'UPDATE', auth.uid()
+    );
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    INSERT INTO business_days_history (
+      id, year, day_type, jan, feb, mar, apr, may, jun, jul, aug, sep, oct, nov, dec,
+      notes, created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.year, OLD.day_type, OLD.jan, OLD.feb, OLD.mar, OLD.apr, OLD.may, OLD.jun,
+      OLD.jul, OLD.aug, OLD.sep, OLD.oct, OLD.nov, OLD.dec,
+      OLD.notes, OLD.created_at, OLD.updated_at, OLD.created_by,
+      'DELETE', auth.uid()
+    );
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER trg_archive_business_days
+AFTER INSERT OR UPDATE OR DELETE ON business_days
+FOR EACH ROW
+EXECUTE FUNCTION archive_business_days_to_history();
+
+-- ============================================================================
 -- リアルタイム機能の有効化
 -- ============================================================================
 
@@ -1119,6 +1279,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE work_records;
 ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 ALTER PUBLICATION supabase_realtime ADD TABLE employees;
 ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs;
+ALTER PUBLICATION supabase_realtime ADD TABLE business_days;
 
 -- 履歴テーブルもリアルタイム対象に（監査用）
 ALTER PUBLICATION supabase_realtime ADD TABLE fields_history;
@@ -1128,6 +1289,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE work_records_history;
 ALTER PUBLICATION supabase_realtime ADD TABLE expenses_history;
 ALTER PUBLICATION supabase_realtime ADD TABLE employees_history;
 ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs_history;
+ALTER PUBLICATION supabase_realtime ADD TABLE business_days_history;
 
 -- ============================================================================
 -- サンプルデータ（テスト用）
