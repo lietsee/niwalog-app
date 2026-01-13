@@ -30,9 +30,9 @@ CREATE TABLE fields (
   toilet_distance VARCHAR(100),            -- トイレまでの距離（例: 徒歩5分）
 
   -- 移動費
-  travel_distance_km DECIMAL(10, 2),       -- 往復移動距離（km）
-  travel_time_minutes INTEGER,             -- 往復移動時間（分）
-  travel_cost INTEGER,                     -- 往復移動費（円）
+  travel_distance_km DECIMAL(10, 2),       -- 片道移動距離（km）
+  travel_time_minutes INTEGER,             -- 片道移動時間（分）
+  travel_cost INTEGER,                     -- 片道移動費（円）
 
   -- 備考・注意事項
   notes TEXT,                              -- 現場備考
@@ -51,7 +51,7 @@ CREATE INDEX idx_fields_name ON fields(field_name);
 -- コメント
 COMMENT ON TABLE fields IS '現場マスタ: 現場の基本情報と環境情報を管理（アクティブなレコードのみ）';
 COMMENT ON COLUMN fields.field_code IS '現場コード（例: KT-0001, NG-0007）';
-COMMENT ON COLUMN fields.travel_cost IS 'ガソリン代・ETC等を含む往復移動費';
+COMMENT ON COLUMN fields.travel_cost IS 'ガソリン代・ETC等を含む片道移動費';
 
 -- ============================================================================
 -- 1-H. fields_history（現場マスタ履歴）

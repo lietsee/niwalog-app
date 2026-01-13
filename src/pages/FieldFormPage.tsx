@@ -307,7 +307,7 @@ export function FieldFormPage({ onNavigate, fieldId }: FieldFormPageProps) {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="travel_distance_km">往復移動距離（km）</Label>
+                  <Label htmlFor="travel_distance_km">片道移動距離（km）</Label>
                   <Input
                     id="travel_distance_km"
                     type="number"
@@ -323,7 +323,7 @@ export function FieldFormPage({ onNavigate, fieldId }: FieldFormPageProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="travel_time_minutes">往復移動時間（分）</Label>
+                  <Label htmlFor="travel_time_minutes">片道移動時間（分）</Label>
                   <Input
                     id="travel_time_minutes"
                     type="number"
@@ -338,7 +338,7 @@ export function FieldFormPage({ onNavigate, fieldId }: FieldFormPageProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="travel_cost">往復移動費（円）</Label>
+                  <Label htmlFor="travel_cost">片道移動費（円）</Label>
                   <Input
                     id="travel_cost"
                     type="number"

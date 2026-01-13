@@ -296,9 +296,9 @@ niwalog-app/
 | has_water | BOOLEAN | DEFAULT FALSE | 水道利用可否 |
 | has_toilet | BOOLEAN | DEFAULT FALSE | トイレ使用可否 |
 | toilet_distance | VARCHAR(100) | NULL | トイレまでの距離（例: 徒歩5分） |
-| travel_distance_km | NUMERIC(10, 2) | NULL | 往復移動距離（km） |
-| travel_time_minutes | INTEGER | NULL | 往復移動時間（分） |
-| travel_cost | INTEGER | NULL | 往復移動費（円） |
+| travel_distance_km | NUMERIC(10, 2) | NULL | 片道移動距離（km） |
+| travel_time_minutes | INTEGER | NULL | 片道移動時間（分） |
+| travel_cost | INTEGER | NULL | 片道移動費（円） |
 | notes | TEXT | NULL | 現場備考 |
 | warnings | TEXT | NULL | 注意事項 |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
@@ -691,7 +691,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs;
 - フォームセクション:
   - 基本情報（現場コード、現場名、顧客名、住所）
   - 現場環境（電気・水道・トイレの有無、トイレまでの距離）
-  - 移動費情報（往復移動距離・時間・費用）
+  - 移動費情報（片道移動距離・時間・費用）
   - 備考・注意事項
 - リアルタイムバリデーション
 - エラーメッセージ表示（日本語）
