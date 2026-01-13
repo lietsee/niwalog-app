@@ -1257,13 +1257,16 @@ ON employees_history(employee_code, operation_at DESC);
 - 営業日数管理機能（月給従業員の日給計算用）
 - マジックリンクログイン（パスワード不要のメール認証）
 - ページ状態の永続化（リロード・ブラウザ復帰時の状態維持）
+- トースト通知の改善（中央上段表示・閉じるボタン追加）
+- ダッシュボードグラフの改善（売上と積み上げ費用の2バー表示）
 
 **主要ファイル:**
 - `src/pages/BusinessDaysPage.tsx`: 営業日数管理ページ
 - `src/lib/businessDaysApi.ts`: 営業日数API
 - `src/schemas/businessDaySchema.ts`: バリデーションスキーマ
 - `src/pages/LoginPage.tsx`: マジックリンクログイン追加
-- `src/App.tsx`: ページ状態の永続化
+- `src/App.tsx`: ページ状態の永続化、トースト設定変更
+- `src/components/MonthlyChart.tsx`: グラフ表示改善
 - `supabase/migrations/20260110000000_initial_schema.sql`: business_daysテーブル追加
 - `supabase/config.toml`: マジックリンク用リダイレクトURL設定
 
@@ -1318,6 +1321,28 @@ ON employees_history(employee_code, operation_at DESC);
 - `onAuthStateChange` を修正し、`SIGNED_IN` イベント時のみダッシュボード遷移
 - ログアウト時に sessionStorage をクリア
 - タブを閉じると状態はリセット（sessionStorage の仕様）
+
+#### トースト通知の改善
+操作の邪魔にならないようトースト表示を改善。
+
+**変更内容:**
+- 表示位置: 右上 → 中央上段
+- 閉じるボタン追加（ユーザーが任意でトーストを閉じられる）
+
+**技術:**
+- Sonner の `position="top-center"` と `closeButton` prop を使用
+
+#### ダッシュボードグラフの改善
+月別売上・経費グラフを改善し、粗利が視覚的に分かりやすく。
+
+**変更前:** 5本の独立したバー（売上・経費・人件費・固定費・変動費）
+
+**変更後:** 2本のバー
+- 売上（緑）- 単独バー
+- 総費用（積み上げバー）- 経費・人件費・固定費・変動費を色分けして積み上げ表示
+
+**技術:**
+- Recharts の `stackId` prop で費用バーを積み上げ表示
 
 ---
 
