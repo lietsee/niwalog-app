@@ -177,7 +177,7 @@ function App() {
     return (
       <>
         <LoginPage onSuccess={() => handleNavigate('dashboard')} />
-        <Toaster position="top-right" />
+        <Toaster position="top-center" closeButton />
       </>
     )
   }
@@ -262,7 +262,7 @@ function App() {
           <BusinessDaysPage onNavigate={handleNavigate} />
         )}
       </div>
-      <Toaster position="top-right" />
+      <Toaster position="top-center" closeButton />
     </>
   )
 }
