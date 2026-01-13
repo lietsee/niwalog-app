@@ -445,7 +445,7 @@ niwalog-app/
 | name | VARCHAR(100) | NOT NULL | 氏名 |
 | salary_type | VARCHAR(10) | NOT NULL | 給与タイプ: hourly/daily/monthly |
 | hourly_rate | INTEGER | NULL | 時給（円）- salary_type=hourly の場合 |
-| daily_rate | INTEGER | NULL | 日給（円）- salary_type=daily/monthly の場合 |
+| daily_rate | INTEGER | NULL | 日給/月給（円）- salary_type=daily の場合は日給、salary_type=monthly の場合は月給を格納 |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時（自動） |
 | created_by | UUID | FK → auth.users(id) | 作成者 |
@@ -453,7 +453,7 @@ niwalog-app/
 **給与タイプ:**
 - `hourly`: 時給（人件費 = 時給 × 稼働時間）
 - `daily`: 日給月給（人件費 = 日給 × 按分率）
-- `monthly`: 月給（人件費 = 日給 × 按分率）
+- `monthly`: 月給（人件費 = (月給 ÷ 実稼働日数) × 按分率）※営業日数管理のデータを使用
 
 **インデックス:**
 - `idx_employees_salary_type` on `salary_type`
@@ -1034,20 +1034,29 @@ ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs;
 - 氏名
 - 給与タイプ（RadioGroup: 時給/日給月給/月給）
 - 時給（時給タイプの場合のみ表示）
-- 日給（日給月給/月給タイプの場合のみ表示）
+- 日給（日給月給タイプの場合のみ表示）
+- 月給（月給タイプの場合のみ表示）※会社負担分の社保料等を加算した金額を入力推奨
 
 **削除方式:**
 - 物理削除（履歴テーブル `employees_history` に自動退避）
 
 #### 人件費計算ロジック（laborCostApi.ts）
 - **時給の場合**: `時給 × (total_hours || site_hours)`
-- **日給月給/月給の場合**: `日給 × (その案件での稼働時間 / その日の全案件の稼働時間合計)`
+- **日給月給の場合**: `日給 × (その案件での稼働時間 / その日の全案件の稼働時間合計)`
+- **月給の場合**: `(月給 ÷ 実稼働日数) × (その案件での稼働時間 / その日の全案件の稼働時間合計)`
+  - 実稼働日数 = 営業日数 - 臨時休業日数（営業日数管理から取得）
+  - 営業日数データがない月は計算をスキップ（0円）
 
 **按分計算の例:**
 従業員Aさん（日給: 15,000円）が1/15に2つの案件に従事:
 - 案件X: 4時間拘束
 - 案件Y: 4時間拘束
 - 結果: 案件X = 7,500円、案件Y = 7,500円
+
+**月給計算の例:**
+従業員Bさん（月給: 300,000円）が1月（営業日数22日、臨時休業0日）に従事:
+- 1日あたりの日給: 300,000 ÷ 22 = 13,636円
+- 案件Xで4時間、案件Yで4時間従事 → 各案件6,818円
 
 #### 案件編集画面の「人件費を自動計算」ボタン
 - クリック時に`calculateLaborCost()`を呼び出し
