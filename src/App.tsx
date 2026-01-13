@@ -18,6 +18,29 @@ import { MonthlyCostPage } from '@/pages/MonthlyCostPage'
 import { BusinessDaysPage } from '@/pages/BusinessDaysPage'
 import type { Page } from '@/lib/types'
 
+const NAV_STATE_KEY = 'niwalog_nav_state'
+
+type NavigationState = {
+  currentPage: Page
+  selectedFieldId?: string
+  selectedProjectId?: string
+  selectedWorkDayId?: string
+  selectedExpenseId?: string
+  selectedEmployeeCode?: string
+}
+
+function getInitialNavState(): NavigationState | null {
+  try {
+    const saved = sessionStorage.getItem(NAV_STATE_KEY)
+    if (saved) {
+      return JSON.parse(saved) as NavigationState
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return null
+}
+
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('login')
   const [authed, setAuthed] = useState(false)
@@ -38,26 +61,60 @@ function App() {
     undefined
   )
 
+  const saveNavState = (state: NavigationState) => {
+    try {
+      sessionStorage.setItem(NAV_STATE_KEY, JSON.stringify(state))
+    } catch {
+      // ignore storage errors
+    }
+  }
+
   const handleNavigate = (page: Page, id?: string) => {
     setCurrentPage(page)
+
+    let newFieldId = selectedFieldId
+    let newProjectId = selectedProjectId
+    let newWorkDayId = selectedWorkDayId
+    let newExpenseId = selectedExpenseId
+    let newEmployeeCode = selectedEmployeeCode
+
     if (page === 'field-form') {
+      newFieldId = id
       setSelectedFieldId(id)
     } else if (page === 'project-list') {
+      newFieldId = id
+      newProjectId = undefined
       setSelectedFieldId(id)
       setSelectedProjectId(undefined)
     } else if (page === 'project-form') {
+      newProjectId = id
       setSelectedProjectId(id)
     } else if (page === 'project-detail') {
+      newProjectId = id
+      newWorkDayId = undefined
+      newExpenseId = undefined
       setSelectedProjectId(id)
       setSelectedWorkDayId(undefined)
       setSelectedExpenseId(undefined)
     } else if (page === 'work-day-form') {
+      newWorkDayId = id
       setSelectedWorkDayId(id)
     } else if (page === 'expense-form') {
+      newExpenseId = id
       setSelectedExpenseId(id)
     } else if (page === 'employee-form') {
+      newEmployeeCode = id
       setSelectedEmployeeCode(id)
     }
+
+    saveNavState({
+      currentPage: page,
+      selectedFieldId: newFieldId,
+      selectedProjectId: newProjectId,
+      selectedWorkDayId: newWorkDayId,
+      selectedExpenseId: newExpenseId,
+      selectedEmployeeCode: newEmployeeCode,
+    })
   }
 
   useEffect(() => {
@@ -66,7 +123,18 @@ function App() {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
         setAuthed(true)
-        setCurrentPage('dashboard')
+        // 保存された状態があれば復元、なければダッシュボード
+        const savedState = getInitialNavState()
+        if (savedState && savedState.currentPage !== 'login') {
+          setCurrentPage(savedState.currentPage)
+          setSelectedFieldId(savedState.selectedFieldId)
+          setSelectedProjectId(savedState.selectedProjectId)
+          setSelectedWorkDayId(savedState.selectedWorkDayId)
+          setSelectedExpenseId(savedState.selectedExpenseId)
+          setSelectedEmployeeCode(savedState.selectedEmployeeCode)
+        } else {
+          setCurrentPage('dashboard')
+        }
       }
       setLoading(false)
     }
@@ -74,13 +142,21 @@ function App() {
     checkAuth()
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
         setAuthed(true)
-        setCurrentPage('dashboard')
+        // 初回ログイン（SIGNED_IN）時のみダッシュボードに遷移
+        // TOKEN_REFRESHED などのイベントでは遷移しない
+        if (event === 'SIGNED_IN') {
+          const saved = sessionStorage.getItem(NAV_STATE_KEY)
+          if (!saved) {
+            setCurrentPage('dashboard')
+          }
+        }
       } else {
         setAuthed(false)
         setCurrentPage('login')
+        sessionStorage.removeItem(NAV_STATE_KEY)
       }
     })
 
