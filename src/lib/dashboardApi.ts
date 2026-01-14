@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient'
 import { startOfMonth, endOfMonth, subMonths, addMonths, format } from 'date-fns'
 import type { ApiResponse, DashboardSummary, MonthlyStats, EmployeeWorkSummary, RecentProject } from './types'
+import { getAnnualContractRevenueForPeriod } from './annualContractsApi'
 
 /**
  * ダッシュボードサマリー取得
@@ -36,10 +37,11 @@ export async function getDashboardSummary(
       return { data: null, error: projectsError.message, status: 400 }
     }
 
-    // 期間内の案件取得（売上・人件費）
+    // 期間内の通常案件取得（売上・人件費）
+    // 年間契約案件（contract_type='annual'）は月次配分で計上するため除外
     const { data: monthlyProjects, error: monthlyProjectsError } = await supabase
       .from('projects')
-      .select('invoice_amount, labor_cost')
+      .select('invoice_amount, labor_cost, contract_type')
       .gte('implementation_date', monthStart)
       .lte('implementation_date', monthEnd)
 
@@ -47,6 +49,10 @@ export async function getDashboardSummary(
       console.error('Monthly projects error:', monthlyProjectsError)
       return { data: null, error: monthlyProjectsError.message, status: 400 }
     }
+
+    // 年間契約の月次収益を取得
+    const annualRevenueResult = await getAnnualContractRevenueForPeriod(monthStart, monthEnd)
+    const annualContractRevenue = annualRevenueResult.data || 0
 
     // 期間内の経費取得
     const { data: monthlyExpenses, error: expensesError } = await supabase
@@ -72,17 +78,26 @@ export async function getDashboardSummary(
       return { data: null, error: monthlyCostsError.message, status: 400 }
     }
 
-    // 集計
-    const monthlyInvoice = (monthlyProjects || []).reduce(
-      (sum, p) => sum + (p.invoice_amount || 0),
+    // 集計（Supabaseがnumericを文字列で返す場合があるためNumber()で変換）
+    // 通常案件の売上（年間契約案件は除外）
+    const standardInvoice = (monthlyProjects || []).reduce(
+      (sum, p) => {
+        // 年間契約案件は月次配分で計上するため除外
+        if (p.contract_type === 'annual') return sum
+        return sum + Number(p.invoice_amount ?? 0)
+      },
       0
     )
+    // 通常案件 + 年間契約の月次配分
+    const monthlyInvoice = standardInvoice + annualContractRevenue
+
+    // 人件費は全案件（年間契約含む）から集計
     const monthlyLaborCost = (monthlyProjects || []).reduce(
-      (sum, p) => sum + (p.labor_cost || 0),
+      (sum, p) => sum + Number(p.labor_cost ?? 0),
       0
     )
     const monthlyExpense = (monthlyExpenses || []).reduce(
-      (sum, e) => sum + (e.amount || 0),
+      (sum, e) => sum + Number(e.amount ?? 0),
       0
     )
 
@@ -91,9 +106,9 @@ export async function getDashboardSummary(
     let monthlyVariableCost = 0
     for (const cost of monthlyCosts || []) {
       if (cost.cost_type === 'fixed') {
-        monthlyFixedCost += cost.amount
+        monthlyFixedCost += Number(cost.amount ?? 0)
       } else {
-        monthlyVariableCost += cost.amount
+        monthlyVariableCost += Number(cost.amount ?? 0)
       }
     }
 
@@ -152,9 +167,13 @@ export async function getMonthlyStats(
       // 案件取得（売上・人件費）
       const { data: projects } = await supabase
         .from('projects')
-        .select('invoice_amount, labor_cost')
+        .select('invoice_amount, labor_cost, contract_type')
         .gte('implementation_date', monthStart)
         .lte('implementation_date', monthEnd)
+
+      // 年間契約の月次収益を取得
+      const annualRevenueResult = await getAnnualContractRevenueForPeriod(monthStart, monthEnd)
+      const annualContractRevenue = annualRevenueResult.data || 0
 
       // 経費取得
       const { data: expenses } = await supabase
@@ -169,18 +188,23 @@ export async function getMonthlyStats(
         .select('cost_type, amount')
         .eq('year_month', monthKey)
 
-      const invoice = (projects || []).reduce((sum, p) => sum + (p.invoice_amount || 0), 0)
-      const laborCost = (projects || []).reduce((sum, p) => sum + (p.labor_cost || 0), 0)
-      const expense = (expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0)
+      // 通常案件の売上（年間契約案件は除外）
+      const standardInvoice = (projects || []).reduce((sum, p) => {
+        if (p.contract_type === 'annual') return sum
+        return sum + Number(p.invoice_amount ?? 0)
+      }, 0)
+      const invoice = standardInvoice + annualContractRevenue
+      const laborCost = (projects || []).reduce((sum, p) => sum + Number(p.labor_cost ?? 0), 0)
+      const expense = (expenses || []).reduce((sum, e) => sum + Number(e.amount ?? 0), 0)
 
       // 固定費・変動費集計
       let fixedCost = 0
       let variableCost = 0
       for (const cost of monthlyCosts || []) {
         if (cost.cost_type === 'fixed') {
-          fixedCost += cost.amount
+          fixedCost += Number(cost.amount ?? 0)
         } else {
-          variableCost += cost.amount
+          variableCost += Number(cost.amount ?? 0)
         }
       }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { MapPin, Briefcase, TrendingUp, Receipt, Users, BarChart3, History, ChevronLeft, ChevronRight, UserCog, Building, CreditCard, Wallet, CalendarDays, Database } from 'lucide-react'
+import { MapPin, Briefcase, TrendingUp, Receipt, Users, BarChart3, History, ChevronLeft, ChevronRight, UserCog, Building, CreditCard, Wallet, CalendarDays, Database, FileText } from 'lucide-react'
 import { format, subMonths, addMonths } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,7 @@ import type { DashboardSummary, MonthlyStats, RecentProject, EmployeeWorkSummary
 type PeriodMode = 'single' | 'range'
 
 interface DashboardPageProps {
-  onNavigate: (page: 'field-list' | 'analysis' | 'history' | 'employee-list' | 'monthly-cost' | 'business-days' | 'data-management') => void
+  onNavigate: (page: 'field-list' | 'analysis' | 'history' | 'employee-list' | 'monthly-cost' | 'business-days' | 'data-management' | 'annual-contract-list') => void
 }
 
 function formatCurrency(value: number): string {
@@ -171,6 +171,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
             <Button variant="outline" onClick={() => onNavigate('business-days')}>
               <CalendarDays className="h-4 w-4 mr-2" />
               営業日数
+            </Button>
+            <Button variant="outline" onClick={() => onNavigate('annual-contract-list')}>
+              <FileText className="h-4 w-4 mr-2" />
+              年間契約
             </Button>
             <Button variant="outline" onClick={() => onNavigate('data-management')}>
               <Database className="h-4 w-4 mr-2" />

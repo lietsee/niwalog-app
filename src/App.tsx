@@ -17,6 +17,9 @@ import { HistoryPage } from '@/pages/HistoryPage'
 import { MonthlyCostPage } from '@/pages/MonthlyCostPage'
 import { BusinessDaysPage } from '@/pages/BusinessDaysPage'
 import { DataManagementPage } from '@/pages/DataManagementPage'
+import { AnnualContractListPage } from '@/pages/AnnualContractListPage'
+import { AnnualContractFormPage } from '@/pages/AnnualContractFormPage'
+import { AnnualContractDetailPage } from '@/pages/AnnualContractDetailPage'
 import type { Page } from '@/lib/types'
 
 const NAV_STATE_KEY = 'niwalog_nav_state'
@@ -28,6 +31,7 @@ type NavigationState = {
   selectedWorkDayId?: string
   selectedExpenseId?: string
   selectedEmployeeCode?: string
+  selectedAnnualContractId?: string
 }
 
 function getInitialNavState(): NavigationState | null {
@@ -61,6 +65,9 @@ function App() {
   const [selectedEmployeeCode, setSelectedEmployeeCode] = useState<string | undefined>(
     undefined
   )
+  const [selectedAnnualContractId, setSelectedAnnualContractId] = useState<string | undefined>(
+    undefined
+  )
 
   const saveNavState = (state: NavigationState) => {
     try {
@@ -78,6 +85,7 @@ function App() {
     let newWorkDayId = selectedWorkDayId
     let newExpenseId = selectedExpenseId
     let newEmployeeCode = selectedEmployeeCode
+    let newAnnualContractId = selectedAnnualContractId
 
     if (page === 'field-form') {
       newFieldId = id
@@ -106,6 +114,9 @@ function App() {
     } else if (page === 'employee-form') {
       newEmployeeCode = id
       setSelectedEmployeeCode(id)
+    } else if (page === 'annual-contract-form' || page === 'annual-contract-detail') {
+      newAnnualContractId = id
+      setSelectedAnnualContractId(id)
     }
 
     saveNavState({
@@ -115,6 +126,7 @@ function App() {
       selectedWorkDayId: newWorkDayId,
       selectedExpenseId: newExpenseId,
       selectedEmployeeCode: newEmployeeCode,
+      selectedAnnualContractId: newAnnualContractId,
     })
   }
 
@@ -133,6 +145,7 @@ function App() {
           setSelectedWorkDayId(savedState.selectedWorkDayId)
           setSelectedExpenseId(savedState.selectedExpenseId)
           setSelectedEmployeeCode(savedState.selectedEmployeeCode)
+          setSelectedAnnualContractId(savedState.selectedAnnualContractId)
         } else {
           setCurrentPage('dashboard')
         }
@@ -264,6 +277,21 @@ function App() {
         )}
         {currentPage === 'data-management' && (
           <DataManagementPage onNavigate={handleNavigate} />
+        )}
+        {currentPage === 'annual-contract-list' && (
+          <AnnualContractListPage onNavigate={handleNavigate} />
+        )}
+        {currentPage === 'annual-contract-form' && (
+          <AnnualContractFormPage
+            onNavigate={handleNavigate}
+            contractId={selectedAnnualContractId}
+          />
+        )}
+        {currentPage === 'annual-contract-detail' && selectedAnnualContractId && (
+          <AnnualContractDetailPage
+            contractId={selectedAnnualContractId}
+            onNavigate={handleNavigate}
+          />
         )}
       </div>
       <Toaster position="top-center" closeButton />

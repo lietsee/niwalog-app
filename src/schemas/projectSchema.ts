@@ -39,6 +39,17 @@ export const projectSchema = z.object({
   review_good_points: z.string().nullable().optional(),
   review_improvements: z.string().nullable().optional(),
   review_next_actions: z.string().nullable().optional(),
+  contract_type: z.enum(['standard', 'annual']).default('standard'),
+  annual_contract_id: z.string().uuid('年間契約IDが無効です').nullable().optional(),
+}).superRefine((data, ctx) => {
+  // 年間契約を選択した場合、年間契約IDは必須
+  if (data.contract_type === 'annual' && !data.annual_contract_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: '年間契約を選択した場合は、対象の年間契約を選択してください',
+      path: ['annual_contract_id'],
+    })
+  }
 })
 
 export type ProjectFormData = z.infer<typeof projectSchema>

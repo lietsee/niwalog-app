@@ -26,6 +26,9 @@ export type Field = {
   created_by: string | null
 }
 
+// ContractType (契約タイプ)
+export type ContractType = 'standard' | 'annual'
+
 // Project (案件)
 export type Project = {
   id: string
@@ -43,6 +46,8 @@ export type Project = {
   review_good_points: string | null
   review_improvements: string | null
   review_next_actions: string | null
+  contract_type: ContractType           // 契約タイプ
+  annual_contract_id: string | null     // 年間契約ID
   created_at: string
   updated_at: string
   created_by: string | null
@@ -141,6 +146,73 @@ export type BusinessDay = {
   created_at: string
   updated_at: string
   created_by: string | null
+}
+
+// RevenueRecognitionMethod (収益認識方式)
+export type RevenueRecognitionMethod = 'hours_based' | 'days_based' | 'equal_monthly'
+
+// AnnualContract (年間契約マスタ)
+export type AnnualContract = {
+  id: string
+  field_id: string
+  contract_name: string
+  fiscal_year: number
+  contract_start_date: string
+  contract_end_date: string
+  contract_amount: number
+  budget_hours: number
+  revenue_recognition_method: RevenueRecognitionMethod
+  is_settled: boolean
+  settled_at: string | null
+  settlement_adjustment: number
+  notes: string | null
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
+// AnnualContractWithField (現場情報付き年間契約)
+export type AnnualContractWithField = AnnualContract & {
+  fields: {
+    field_code: string
+    field_name: string
+    customer_name: string | null
+  }
+}
+
+// AllocationStatus (配分ステータス)
+export type AllocationStatus = 'provisional' | 'confirmed' | 'adjusted'
+
+// MonthlyRevenueAllocation (月次収益配分)
+export type MonthlyRevenueAllocation = {
+  id: string
+  annual_contract_id: string
+  allocation_month: string              // 月初日（YYYY-MM-DD形式）
+  actual_hours: number
+  cumulative_hours: number
+  allocation_rate: number
+  cumulative_rate: number
+  allocated_revenue: number
+  cumulative_revenue: number
+  adjustment_amount: number
+  remaining_budget_hours: number | null
+  projected_annual_hours: number | null
+  status: AllocationStatus
+  calculated_at: string
+  confirmed_at: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+// AnnualContractProgress (年間契約進捗)
+export type AnnualContractProgress = {
+  contract: AnnualContractWithField
+  allocations: MonthlyRevenueAllocation[]
+  totalActualHours: number
+  totalAllocatedRevenue: number
+  progressRate: number                  // 進捗率（累計時間/予算時間）
+  remainingBudgetHours: number
 }
 
 // MonthlyCost (月次経費)
@@ -293,6 +365,19 @@ export type MonthlyCostHistoryRecord = {
   operationBy: string | null
 }
 
+// AnnualContract Input Type (年間契約入力)
+export type AnnualContractInput = {
+  field_id: string
+  contract_name: string
+  fiscal_year: number
+  contract_start_date: string
+  contract_end_date: string
+  contract_amount: number
+  budget_hours: number
+  revenue_recognition_method?: RevenueRecognitionMethod
+  notes?: string | null
+}
+
 // Page Type for routing
 export type Page =
   | 'login'
@@ -311,3 +396,6 @@ export type Page =
   | 'analysis'
   | 'history'
   | 'data-management'
+  | 'annual-contract-list'
+  | 'annual-contract-form'
+  | 'annual-contract-detail'

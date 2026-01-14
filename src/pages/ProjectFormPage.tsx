@@ -20,6 +20,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   createProject,
   updateProject,
   getProjectById,
@@ -27,8 +34,10 @@ import {
   type ProjectInput,
 } from '@/lib/projectsApi'
 import { getFieldById, type Field } from '@/lib/fieldsApi'
+import { listAnnualContractsByField } from '@/lib/annualContractsApi'
 import { calculateLaborCost, type LaborCostResult } from '@/lib/laborCostApi'
 import { projectSchema, type ProjectFormData } from '@/schemas/projectSchema'
+import type { AnnualContract, ContractType } from '@/lib/types'
 
 interface ProjectFormPageProps {
   fieldId: string
@@ -44,6 +53,7 @@ export function ProjectFormPage({
   onSuccess,
 }: ProjectFormPageProps) {
   const [field, setField] = useState<Field | null>(null)
+  const [annualContracts, setAnnualContracts] = useState<AnnualContract[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -75,12 +85,15 @@ export function ProjectFormPage({
       review_good_points: null,
       review_improvements: null,
       review_next_actions: null,
+      contract_type: 'standard' as ContractType,
+      annual_contract_id: null,
     },
   })
 
   const workTypePruning = watch('work_type_pruning')
   const workTypeWeeding = watch('work_type_weeding')
   const workTypeCleaning = watch('work_type_cleaning')
+  const contractType = watch('contract_type')
 
   useEffect(() => {
     loadInitialData()
@@ -99,6 +112,16 @@ export function ProjectFormPage({
       return
     }
     setField(fieldResult.data)
+
+    // 年間契約リストを取得
+    const contractsResult = await listAnnualContractsByField(fieldId)
+    let allContracts = contractsResult.data || []
+    if (contractsResult.error) {
+      console.error('年間契約取得エラー:', contractsResult.error)
+      // 年間契約の取得失敗は致命的ではないので続行
+    }
+
+    let linkedContractId: string | null = null
 
     if (isEditMode && projectId) {
       // 編集モード: 案件情報を取得
@@ -121,6 +144,13 @@ export function ProjectFormPage({
         setValue('review_good_points', data.review_good_points)
         setValue('review_improvements', data.review_improvements)
         setValue('review_next_actions', data.review_next_actions)
+        setValue('contract_type', data.contract_type)
+        setValue('annual_contract_id', data.annual_contract_id)
+
+        // 現在紐付いている年間契約IDを保持
+        if (data.annual_contract_id) {
+          linkedContractId = data.annual_contract_id
+        }
       }
     } else {
       // 新規作成モード: 次の案件番号を取得
@@ -132,6 +162,13 @@ export function ProjectFormPage({
       const today = new Date().toISOString().split('T')[0]
       setValue('implementation_date', today)
     }
+
+    // 年間契約リストをセット
+    // 精算済みでない契約 + 編集時に現在紐付いている契約（精算済みでも含める）
+    const filteredContracts = allContracts.filter(c =>
+      !c.is_settled || c.id === linkedContractId
+    )
+    setAnnualContracts(filteredContracts)
 
     setLoading(false)
   }
@@ -154,6 +191,8 @@ export function ProjectFormPage({
       review_good_points: data.review_good_points || null,
       review_improvements: data.review_improvements || null,
       review_next_actions: data.review_next_actions || null,
+      contract_type: data.contract_type,
+      annual_contract_id: data.contract_type === 'annual' ? (data.annual_contract_id || null) : null,
     }
 
     if (isEditMode && projectId) {
@@ -296,6 +335,76 @@ export function ProjectFormPage({
                     </p>
                   )}
                 </div>
+              </div>
+
+              {/* 契約タイプ選択 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="contract_type">契約タイプ</Label>
+                  <Select
+                    value={contractType}
+                    onValueChange={(value) => {
+                      setValue('contract_type', value as ContractType, { shouldValidate: true })
+                      // 通常案件に変更した場合は年間契約IDをクリア
+                      if (value === 'standard') {
+                        setValue('annual_contract_id', null, { shouldValidate: true })
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="契約タイプを選択" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="standard">通常案件</SelectItem>
+                      <SelectItem value="annual">年間契約</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    年間契約は月次収益按分で計上されます
+                  </p>
+                </div>
+
+                {contractType === 'annual' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="annual_contract_id">
+                      年間契約 <span className="text-destructive">*</span>
+                    </Label>
+                    <Select
+                      value={watch('annual_contract_id') || ''}
+                      onValueChange={(value) =>
+                        setValue('annual_contract_id', value || null, { shouldValidate: true })
+                      }
+                    >
+                      <SelectTrigger className={errors.annual_contract_id ? 'border-destructive' : ''}>
+                        <SelectValue placeholder="年間契約を選択" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {annualContracts.length === 0 ? (
+                          <SelectItem value="" disabled>
+                            該当する年間契約がありません
+                          </SelectItem>
+                        ) : (
+                          annualContracts.map((contract) => (
+                            <SelectItem key={contract.id} value={contract.id}>
+                              {contract.contract_name} ({contract.fiscal_year}年度)
+                              {contract.is_settled && ' (精算済)'}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {errors.annual_contract_id && (
+                      <p className="text-sm text-destructive">
+                        {errors.annual_contract_id.message}
+                      </p>
+                    )}
+                    {annualContracts.length === 0 && (
+                      <p className="text-xs text-amber-600">
+                        この現場には有効な年間契約がありません。先に年間契約を登録してください。
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

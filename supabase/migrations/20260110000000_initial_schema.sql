@@ -132,24 +132,36 @@ CREATE TABLE projects (
   review_improvements TEXT,                -- 改善すべき点
   review_next_actions TEXT,                -- 次回への申し送り
 
+  -- 年間契約関連
+  contract_type VARCHAR(20) DEFAULT 'standard'
+    CHECK (contract_type IN ('standard', 'annual')),  -- 契約タイプ
+  annual_contract_id UUID,                 -- 年間契約への紐付け（後で外部キー制約追加）
+
   -- メタデータ
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   created_by UUID REFERENCES auth.users(id),
 
   -- 複合ユニーク制約（1つの現場で案件番号が重複しないように）
-  UNIQUE(field_id, project_number)
+  UNIQUE(field_id, project_number),
+
+  -- 契約タイプと年間契約IDの整合性チェック
+  CHECK (contract_type <> 'annual' OR annual_contract_id IS NOT NULL)
 );
 
 -- インデックス
 CREATE INDEX idx_projects_field ON projects(field_id);
 CREATE INDEX idx_projects_date ON projects(implementation_date DESC);
 CREATE INDEX idx_projects_field_date ON projects(field_id, implementation_date DESC);
+CREATE INDEX idx_projects_contract_type ON projects(contract_type);
+CREATE INDEX idx_projects_annual_contract ON projects(annual_contract_id);
 
 -- コメント
 COMMENT ON TABLE projects IS '案件: 1つの現場で複数回実施する作業を案件として管理';
 COMMENT ON COLUMN projects.project_number IS '現場内での案件番号（#1, #2, #3...）';
 COMMENT ON COLUMN projects.estimate_amount IS '見積もり金額（例年作業の場合はNULL）';
+COMMENT ON COLUMN projects.contract_type IS '契約タイプ: standard=通常案件, annual=年間契約案件';
+COMMENT ON COLUMN projects.annual_contract_id IS '年間契約への紐付け（contract_type=annualの場合に使用）';
 
 -- ============================================================================
 -- 2-H. projects_history（案件履歴）
@@ -174,6 +186,8 @@ CREATE TABLE projects_history (
   review_good_points TEXT,
   review_improvements TEXT,
   review_next_actions TEXT,
+  contract_type VARCHAR(20),                 -- 契約タイプ
+  annual_contract_id UUID,                   -- 年間契約ID
   created_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ,
   created_by UUID,
@@ -562,6 +576,7 @@ BEGIN
       work_type_pruning, work_type_weeding, work_type_cleaning, work_type_other,
       estimate_amount, invoice_amount, labor_cost, expense_total,
       review_good_points, review_improvements, review_next_actions,
+      contract_type, annual_contract_id,
       created_at, updated_at, created_by,
       operation_type, operation_by
     ) VALUES (
@@ -569,6 +584,7 @@ BEGIN
       NEW.work_type_pruning, NEW.work_type_weeding, NEW.work_type_cleaning, NEW.work_type_other,
       NEW.estimate_amount, NEW.invoice_amount, NEW.labor_cost, NEW.expense_total,
       NEW.review_good_points, NEW.review_improvements, NEW.review_next_actions,
+      NEW.contract_type, NEW.annual_contract_id,
       NEW.created_at, NEW.updated_at, NEW.created_by,
       'INSERT', auth.uid()
     );
@@ -579,6 +595,7 @@ BEGIN
       work_type_pruning, work_type_weeding, work_type_cleaning, work_type_other,
       estimate_amount, invoice_amount, labor_cost, expense_total,
       review_good_points, review_improvements, review_next_actions,
+      contract_type, annual_contract_id,
       created_at, updated_at, created_by,
       operation_type, operation_by
     ) VALUES (
@@ -586,6 +603,7 @@ BEGIN
       OLD.work_type_pruning, OLD.work_type_weeding, OLD.work_type_cleaning, OLD.work_type_other,
       OLD.estimate_amount, OLD.invoice_amount, OLD.labor_cost, OLD.expense_total,
       OLD.review_good_points, OLD.review_improvements, OLD.review_next_actions,
+      OLD.contract_type, OLD.annual_contract_id,
       OLD.created_at, OLD.updated_at, OLD.created_by,
       'UPDATE', auth.uid()
     );
@@ -596,6 +614,7 @@ BEGIN
       work_type_pruning, work_type_weeding, work_type_cleaning, work_type_other,
       estimate_amount, invoice_amount, labor_cost, expense_total,
       review_good_points, review_improvements, review_next_actions,
+      contract_type, annual_contract_id,
       created_at, updated_at, created_by,
       operation_type, operation_by
     ) VALUES (
@@ -603,6 +622,7 @@ BEGIN
       OLD.work_type_pruning, OLD.work_type_weeding, OLD.work_type_cleaning, OLD.work_type_other,
       OLD.estimate_amount, OLD.invoice_amount, OLD.labor_cost, OLD.expense_total,
       OLD.review_good_points, OLD.review_improvements, OLD.review_next_actions,
+      OLD.contract_type, OLD.annual_contract_id,
       OLD.created_at, OLD.updated_at, OLD.created_by,
       'DELETE', auth.uid()
     );
@@ -1268,6 +1288,378 @@ FOR EACH ROW
 EXECUTE FUNCTION archive_business_days_to_history();
 
 -- ============================================================================
+-- 9. annual_contracts（年間契約マスタ）
+-- ============================================================================
+-- 公共事業などの年間契約を管理。進行基準で月次収益を按分計算。
+
+CREATE TABLE annual_contracts (
+  -- 主キー
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- 外部キー
+  field_id UUID NOT NULL REFERENCES fields(id) ON DELETE RESTRICT,
+
+  -- 契約情報
+  contract_name VARCHAR(255) NOT NULL,           -- 契約名（例: 2026年度 金城公園管理業務）
+  fiscal_year INTEGER NOT NULL,                   -- 対象年度（例: 2026）
+  contract_start_date DATE NOT NULL,              -- 契約開始日
+  contract_end_date DATE NOT NULL,                -- 契約終了日
+
+  -- 金額
+  contract_amount INTEGER NOT NULL,               -- 年間契約額（円）
+
+  -- 予算時間（進行基準の分母）
+  budget_hours DECIMAL(10, 2) NOT NULL,           -- 年間予算時間（例: 1000時間）
+
+  -- 計算設定
+  revenue_recognition_method VARCHAR(20) NOT NULL DEFAULT 'hours_based'
+    CHECK (revenue_recognition_method IN ('hours_based', 'days_based', 'equal_monthly')),
+
+  -- 精算
+  is_settled BOOLEAN DEFAULT FALSE,               -- 精算済みフラグ
+  settled_at TIMESTAMPTZ,                         -- 精算日時
+  settlement_adjustment INTEGER DEFAULT 0,        -- 精算時調整額
+
+  -- 備考
+  notes TEXT,
+
+  -- メタデータ
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_by UUID REFERENCES auth.users(id),
+
+  -- 制約
+  CHECK (budget_hours > 0),                       -- 予算時間は正の値
+  CHECK (contract_amount > 0),                    -- 契約額は正の値
+  CHECK (contract_start_date <= contract_end_date), -- 開始日 <= 終了日
+  UNIQUE(field_id, contract_name, fiscal_year)    -- 同一フィールド・年度・契約名で一意
+);
+
+-- インデックス
+CREATE INDEX idx_annual_contracts_field ON annual_contracts(field_id);
+CREATE INDEX idx_annual_contracts_year ON annual_contracts(fiscal_year);
+CREATE INDEX idx_annual_contracts_field_year ON annual_contracts(field_id, fiscal_year);
+
+-- コメント
+COMMENT ON TABLE annual_contracts IS '年間契約マスタ: 公共事業等の年間契約を管理、進行基準で月次収益按分';
+COMMENT ON COLUMN annual_contracts.contract_name IS '契約名（例: 2026年度 金城公園管理業務）';
+COMMENT ON COLUMN annual_contracts.fiscal_year IS '対象年度（表示・検索用）';
+COMMENT ON COLUMN annual_contracts.budget_hours IS '年間予算時間（進行基準の分母）';
+COMMENT ON COLUMN annual_contracts.revenue_recognition_method IS '収益認識方式: hours_based=稼働時間, days_based=稼働日数, equal_monthly=月割均等';
+COMMENT ON COLUMN annual_contracts.settlement_adjustment IS '年度末精算時の調整額';
+
+-- RLS
+ALTER TABLE annual_contracts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated users can manage annual_contracts" ON annual_contracts FOR ALL USING (auth.role() = 'authenticated');
+
+-- updated_at自動更新トリガー
+CREATE TRIGGER update_annual_contracts_updated_at
+BEFORE UPDATE ON annual_contracts
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- 9-H. annual_contracts_history（年間契約履歴）
+-- ============================================================================
+
+CREATE TABLE annual_contracts_history (
+  history_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- 元のレコード情報
+  id UUID NOT NULL,
+  field_id UUID NOT NULL,
+  contract_name VARCHAR(255) NOT NULL,
+  fiscal_year INTEGER NOT NULL,
+  contract_start_date DATE NOT NULL,
+  contract_end_date DATE NOT NULL,
+  contract_amount INTEGER NOT NULL,
+  budget_hours DECIMAL(10, 2) NOT NULL,
+  revenue_recognition_method VARCHAR(20) NOT NULL,
+  is_settled BOOLEAN,
+  settled_at TIMESTAMPTZ,
+  settlement_adjustment INTEGER,
+  notes TEXT,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  created_by UUID,
+
+  -- 履歴管理情報
+  operation_type VARCHAR(10) NOT NULL,     -- 'INSERT', 'UPDATE', 'DELETE'
+  operation_at TIMESTAMPTZ DEFAULT NOW(),
+  operation_by UUID REFERENCES auth.users(id),
+  reason TEXT
+);
+
+-- インデックス
+CREATE INDEX idx_annual_contracts_history_id ON annual_contracts_history(id);
+CREATE INDEX idx_annual_contracts_history_field ON annual_contracts_history(field_id);
+CREATE INDEX idx_annual_contracts_history_year ON annual_contracts_history(fiscal_year);
+CREATE INDEX idx_annual_contracts_history_operation_at ON annual_contracts_history(operation_at DESC);
+
+-- コメント
+COMMENT ON TABLE annual_contracts_history IS '年間契約履歴: 削除・更新された年間契約情報を保管';
+
+-- RLS
+ALTER TABLE annual_contracts_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view annual_contracts history" ON annual_contracts_history FOR SELECT USING (true);
+CREATE POLICY "System can archive annual_contracts history" ON annual_contracts_history FOR INSERT WITH CHECK (true);
+
+-- 履歴テーブルへの自動退避トリガー
+CREATE OR REPLACE FUNCTION archive_annual_contracts_to_history()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO annual_contracts_history (
+      id, field_id, contract_name, fiscal_year, contract_start_date, contract_end_date,
+      contract_amount, budget_hours, revenue_recognition_method,
+      is_settled, settled_at, settlement_adjustment, notes,
+      created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      NEW.id, NEW.field_id, NEW.contract_name, NEW.fiscal_year, NEW.contract_start_date, NEW.contract_end_date,
+      NEW.contract_amount, NEW.budget_hours, NEW.revenue_recognition_method,
+      NEW.is_settled, NEW.settled_at, NEW.settlement_adjustment, NEW.notes,
+      NEW.created_at, NEW.updated_at, NEW.created_by,
+      'INSERT', auth.uid()
+    );
+    RETURN NEW;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO annual_contracts_history (
+      id, field_id, contract_name, fiscal_year, contract_start_date, contract_end_date,
+      contract_amount, budget_hours, revenue_recognition_method,
+      is_settled, settled_at, settlement_adjustment, notes,
+      created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.field_id, OLD.contract_name, OLD.fiscal_year, OLD.contract_start_date, OLD.contract_end_date,
+      OLD.contract_amount, OLD.budget_hours, OLD.revenue_recognition_method,
+      OLD.is_settled, OLD.settled_at, OLD.settlement_adjustment, OLD.notes,
+      OLD.created_at, OLD.updated_at, OLD.created_by,
+      'UPDATE', auth.uid()
+    );
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    INSERT INTO annual_contracts_history (
+      id, field_id, contract_name, fiscal_year, contract_start_date, contract_end_date,
+      contract_amount, budget_hours, revenue_recognition_method,
+      is_settled, settled_at, settlement_adjustment, notes,
+      created_at, updated_at, created_by,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.field_id, OLD.contract_name, OLD.fiscal_year, OLD.contract_start_date, OLD.contract_end_date,
+      OLD.contract_amount, OLD.budget_hours, OLD.revenue_recognition_method,
+      OLD.is_settled, OLD.settled_at, OLD.settlement_adjustment, OLD.notes,
+      OLD.created_at, OLD.updated_at, OLD.created_by,
+      'DELETE', auth.uid()
+    );
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER trg_archive_annual_contracts
+AFTER INSERT OR UPDATE OR DELETE ON annual_contracts
+FOR EACH ROW
+EXECUTE FUNCTION archive_annual_contracts_to_history();
+
+-- ============================================================================
+-- 10. monthly_revenue_allocations（月次収益配分）
+-- ============================================================================
+-- 年間契約の月次収益認識結果を記録（監査証跡・再計算の効率化）
+
+CREATE TABLE monthly_revenue_allocations (
+  -- 主キー
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- 外部キー
+  annual_contract_id UUID NOT NULL REFERENCES annual_contracts(id) ON DELETE CASCADE,
+
+  -- 対象年月（月初日で保存）
+  allocation_month DATE NOT NULL,                 -- 対象年月（例: 2026-01-01）
+
+  -- 実績
+  actual_hours DECIMAL(10, 2) NOT NULL DEFAULT 0,  -- 当月実稼働時間
+  cumulative_hours DECIMAL(10, 2) NOT NULL DEFAULT 0, -- 累計稼働時間
+
+  -- 収益計算
+  allocation_rate DECIMAL(8, 6) NOT NULL DEFAULT 0,   -- 配分率（当月時間/年間予算時間）
+  cumulative_rate DECIMAL(8, 6) NOT NULL DEFAULT 0,   -- 累計配分率
+  allocated_revenue INTEGER NOT NULL DEFAULT 0,       -- 当月認識収益
+  cumulative_revenue INTEGER NOT NULL DEFAULT 0,      -- 累計認識収益
+  adjustment_amount INTEGER NOT NULL DEFAULT 0,       -- 調整額（精算時）
+
+  -- 参考情報
+  remaining_budget_hours DECIMAL(10, 2),            -- 残予算時間
+  projected_annual_hours DECIMAL(10, 2),            -- 年間見込み時間（進捗から推計）
+
+  -- ステータス
+  status VARCHAR(20) NOT NULL DEFAULT 'provisional'
+    CHECK (status IN ('provisional', 'confirmed', 'adjusted')),
+
+  -- メタデータ
+  calculated_at TIMESTAMPTZ DEFAULT NOW(),
+  confirmed_at TIMESTAMPTZ,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+  -- 制約
+  CHECK (allocation_month = date_trunc('month', allocation_month)::date), -- 月初日のみ（明示的キャスト）
+  CHECK (actual_hours >= 0),                      -- 実稼働時間は非負値
+  CHECK (cumulative_hours >= 0),                  -- 累計時間は非負値
+  CHECK (allocation_rate >= 0),                   -- 配分率は非負値
+  CHECK (cumulative_rate >= 0),                   -- 累計配分率は非負値
+  UNIQUE(annual_contract_id, allocation_month)
+);
+
+-- インデックス
+CREATE INDEX idx_monthly_allocations_contract ON monthly_revenue_allocations(annual_contract_id);
+CREATE INDEX idx_monthly_allocations_month ON monthly_revenue_allocations(allocation_month);
+CREATE INDEX idx_monthly_allocations_contract_month ON monthly_revenue_allocations(annual_contract_id, allocation_month);
+CREATE INDEX idx_monthly_allocations_status ON monthly_revenue_allocations(status);
+
+-- コメント
+COMMENT ON TABLE monthly_revenue_allocations IS '月次収益配分: 年間契約の月次収益認識結果を記録';
+COMMENT ON COLUMN monthly_revenue_allocations.allocation_month IS '対象年月（月初日で保存、例: 2026-01-01）';
+COMMENT ON COLUMN monthly_revenue_allocations.actual_hours IS '当月の実稼働時間';
+COMMENT ON COLUMN monthly_revenue_allocations.cumulative_hours IS '契約開始からの累計稼働時間';
+COMMENT ON COLUMN monthly_revenue_allocations.allocation_rate IS '当月配分率（当月時間/年間予算時間）';
+COMMENT ON COLUMN monthly_revenue_allocations.allocated_revenue IS '当月認識収益（累計ベースで計算後の差分）';
+COMMENT ON COLUMN monthly_revenue_allocations.adjustment_amount IS '精算時の調整額';
+COMMENT ON COLUMN monthly_revenue_allocations.status IS 'ステータス: provisional=暫定, confirmed=確定, adjusted=精算済';
+
+-- RLS
+ALTER TABLE monthly_revenue_allocations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated users can manage monthly_allocations" ON monthly_revenue_allocations FOR ALL USING (auth.role() = 'authenticated');
+
+-- updated_at自動更新トリガー
+CREATE TRIGGER update_monthly_allocations_updated_at
+BEFORE UPDATE ON monthly_revenue_allocations
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- 10-H. monthly_revenue_allocations_history（月次収益配分履歴）
+-- ============================================================================
+
+CREATE TABLE monthly_revenue_allocations_history (
+  history_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- 元のレコード情報
+  id UUID NOT NULL,
+  annual_contract_id UUID NOT NULL,
+  allocation_month DATE NOT NULL,
+  actual_hours DECIMAL(10, 2) NOT NULL,
+  cumulative_hours DECIMAL(10, 2) NOT NULL,
+  allocation_rate DECIMAL(8, 6) NOT NULL,
+  cumulative_rate DECIMAL(8, 6) NOT NULL,
+  allocated_revenue INTEGER NOT NULL,
+  cumulative_revenue INTEGER NOT NULL,
+  adjustment_amount INTEGER NOT NULL,
+  remaining_budget_hours DECIMAL(10, 2),
+  projected_annual_hours DECIMAL(10, 2),
+  status VARCHAR(20) NOT NULL,
+  calculated_at TIMESTAMPTZ,
+  confirmed_at TIMESTAMPTZ,
+  notes TEXT,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+
+  -- 履歴管理情報
+  operation_type VARCHAR(10) NOT NULL,
+  operation_at TIMESTAMPTZ DEFAULT NOW(),
+  operation_by UUID REFERENCES auth.users(id),
+  reason TEXT
+);
+
+-- インデックス
+CREATE INDEX idx_monthly_allocations_history_id ON monthly_revenue_allocations_history(id);
+CREATE INDEX idx_monthly_allocations_history_contract ON monthly_revenue_allocations_history(annual_contract_id);
+CREATE INDEX idx_monthly_allocations_history_month ON monthly_revenue_allocations_history(allocation_month);
+CREATE INDEX idx_monthly_allocations_history_operation_at ON monthly_revenue_allocations_history(operation_at DESC);
+
+-- コメント
+COMMENT ON TABLE monthly_revenue_allocations_history IS '月次収益配分履歴: 削除・更新された月次収益配分情報を保管';
+
+-- RLS
+ALTER TABLE monthly_revenue_allocations_history ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can view monthly_allocations history" ON monthly_revenue_allocations_history FOR SELECT USING (true);
+CREATE POLICY "System can archive monthly_allocations history" ON monthly_revenue_allocations_history FOR INSERT WITH CHECK (true);
+
+-- 履歴テーブルへの自動退避トリガー
+CREATE OR REPLACE FUNCTION archive_monthly_allocations_to_history()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO monthly_revenue_allocations_history (
+      id, annual_contract_id, allocation_month,
+      actual_hours, cumulative_hours, allocation_rate, cumulative_rate,
+      allocated_revenue, cumulative_revenue, adjustment_amount,
+      remaining_budget_hours, projected_annual_hours, status,
+      calculated_at, confirmed_at, notes, created_at, updated_at,
+      operation_type, operation_by
+    ) VALUES (
+      NEW.id, NEW.annual_contract_id, NEW.allocation_month,
+      NEW.actual_hours, NEW.cumulative_hours, NEW.allocation_rate, NEW.cumulative_rate,
+      NEW.allocated_revenue, NEW.cumulative_revenue, NEW.adjustment_amount,
+      NEW.remaining_budget_hours, NEW.projected_annual_hours, NEW.status,
+      NEW.calculated_at, NEW.confirmed_at, NEW.notes, NEW.created_at, NEW.updated_at,
+      'INSERT', auth.uid()
+    );
+    RETURN NEW;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO monthly_revenue_allocations_history (
+      id, annual_contract_id, allocation_month,
+      actual_hours, cumulative_hours, allocation_rate, cumulative_rate,
+      allocated_revenue, cumulative_revenue, adjustment_amount,
+      remaining_budget_hours, projected_annual_hours, status,
+      calculated_at, confirmed_at, notes, created_at, updated_at,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.annual_contract_id, OLD.allocation_month,
+      OLD.actual_hours, OLD.cumulative_hours, OLD.allocation_rate, OLD.cumulative_rate,
+      OLD.allocated_revenue, OLD.cumulative_revenue, OLD.adjustment_amount,
+      OLD.remaining_budget_hours, OLD.projected_annual_hours, OLD.status,
+      OLD.calculated_at, OLD.confirmed_at, OLD.notes, OLD.created_at, OLD.updated_at,
+      'UPDATE', auth.uid()
+    );
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    INSERT INTO monthly_revenue_allocations_history (
+      id, annual_contract_id, allocation_month,
+      actual_hours, cumulative_hours, allocation_rate, cumulative_rate,
+      allocated_revenue, cumulative_revenue, adjustment_amount,
+      remaining_budget_hours, projected_annual_hours, status,
+      calculated_at, confirmed_at, notes, created_at, updated_at,
+      operation_type, operation_by
+    ) VALUES (
+      OLD.id, OLD.annual_contract_id, OLD.allocation_month,
+      OLD.actual_hours, OLD.cumulative_hours, OLD.allocation_rate, OLD.cumulative_rate,
+      OLD.allocated_revenue, OLD.cumulative_revenue, OLD.adjustment_amount,
+      OLD.remaining_budget_hours, OLD.projected_annual_hours, OLD.status,
+      OLD.calculated_at, OLD.confirmed_at, OLD.notes, OLD.created_at, OLD.updated_at,
+      'DELETE', auth.uid()
+    );
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER trg_archive_monthly_allocations
+AFTER INSERT OR UPDATE OR DELETE ON monthly_revenue_allocations
+FOR EACH ROW
+EXECUTE FUNCTION archive_monthly_allocations_to_history();
+
+-- ============================================================================
+-- projects.annual_contract_id への外部キー制約追加
+-- ============================================================================
+-- annual_contracts テーブル作成後に追加
+
+ALTER TABLE projects
+ADD CONSTRAINT fk_projects_annual_contract
+FOREIGN KEY (annual_contract_id) REFERENCES annual_contracts(id) ON DELETE SET NULL;
+
+-- ============================================================================
 -- リアルタイム機能の有効化
 -- ============================================================================
 
@@ -1280,6 +1672,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 ALTER PUBLICATION supabase_realtime ADD TABLE employees;
 ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs;
 ALTER PUBLICATION supabase_realtime ADD TABLE business_days;
+ALTER PUBLICATION supabase_realtime ADD TABLE annual_contracts;
+ALTER PUBLICATION supabase_realtime ADD TABLE monthly_revenue_allocations;
 
 -- 履歴テーブルもリアルタイム対象に（監査用）
 ALTER PUBLICATION supabase_realtime ADD TABLE fields_history;
@@ -1290,6 +1684,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses_history;
 ALTER PUBLICATION supabase_realtime ADD TABLE employees_history;
 ALTER PUBLICATION supabase_realtime ADD TABLE monthly_costs_history;
 ALTER PUBLICATION supabase_realtime ADD TABLE business_days_history;
+ALTER PUBLICATION supabase_realtime ADD TABLE annual_contracts_history;
+ALTER PUBLICATION supabase_realtime ADD TABLE monthly_revenue_allocations_history;
 
 -- ============================================================================
 -- ビュー: 履歴を含む完全なデータ表示
