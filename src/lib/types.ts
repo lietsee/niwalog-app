@@ -399,3 +399,4 @@ export type Page =
   | 'annual-contract-list'
   | 'annual-contract-form'
   | 'annual-contract-detail'
+  | 'settings'

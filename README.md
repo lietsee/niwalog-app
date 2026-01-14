@@ -37,6 +37,7 @@ NiwaLogは、造園・庭園管理業務における現場ごとの詳細情報�
 - **月次経費管理**: 固定費・変動費の月次管理
 - **営業日数管理**: 年度別の営業日数・臨時休業日数管理
 - **年間契約管理**: 年間契約の月次収益按分計算（進行基準）
+- **自動距離計算**: 住所からの片道移動距離・時間の自動計算
 - **ダッシュボード**: サマリー表示、月別グラフ、従業員稼働分析、粗利計算
 - **認証**: パスワードログイン、マジックリンクログイン（メール認証）
 
@@ -217,6 +218,8 @@ niwalog-app/
 │   │   ├── laborCostApi.ts       # 人件費計算API
 │   │   ├── monthlyCostsApi.ts    # 月次経費API（CRUD）
 │   │   ├── annualContractsApi.ts # 年間契約API（CRUD + 月次収益計算）
+│   │   ├── settingsApi.ts        # 設定API（基準住所等）
+│   │   ├── distanceApi.ts        # 距離計算API（Edge Function呼び出し）
 │   │   ├── errorMessages.ts      # エラーメッセージ翻訳
 │   │   └── utils.ts              # ユーティリティ関数
 │   ├── pages/                    # ページコンポーネント
@@ -234,7 +237,8 @@ niwalog-app/
 │   │   ├── MonthlyCostPage.tsx   # 月次経費管理（固定費・変動費）
 │   │   ├── AnnualContractListPage.tsx   # 年間契約一覧
 │   │   ├── AnnualContractFormPage.tsx   # 年間契約作成・編集フォーム
-│   │   └── AnnualContractDetailPage.tsx # 年間契約詳細・月次配分表
+│   │   ├── AnnualContractDetailPage.tsx # 年間契約詳細・月次配分表
+│   │   └── SettingsPage.tsx             # 設定画面（基準住所）
 │   ├── components/               # UIコンポーネント
 │   │   ├── ui/                   # Radix UI ベースコンポーネント
 │   │   │   ├── button.tsx
@@ -268,11 +272,15 @@ niwalog-app/
 │   │   ├── workDaySchema.ts      # 作業日バリデーション
 │   │   ├── expenseSchema.ts      # 経費バリデーション
 │   │   ├── employeeSchema.ts     # 従業員バリデーション
-│   │   └── monthlyCostSchema.ts  # 月次経費バリデーション
+│   │   ├── monthlyCostSchema.ts  # 月次経費バリデーション
+│   │   └── settingsSchema.ts     # 設定バリデーション
 │   ├── App.tsx                   # ルーティング・認証チェック
 │   └── main.tsx                  # エントリーポイント
 ├── supabase/
 │   ├── config.toml               # Supabaseローカル設定
+│   ├── functions/
+│   │   └── calculate-distance/
+│   │       └── index.ts          # 距離計算Edge Function
 │   └── migrations/
 │       └── 20260110000000_initial_schema.sql  # 全テーブル定義
 ├── .env.local.example            # 環境変数サンプル
@@ -566,6 +574,30 @@ niwalog-app/
 **RLSポリシー:**
 - SELECT: 認証済みユーザーが閲覧可能
 - INSERT/UPDATE/DELETE: 認証済みユーザー全員が操作可能
+
+#### app_settings（アプリ設定）
+
+アプリケーション全体の設定を保存するテーブル。基準住所などを管理。
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|---|------|------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | 設定ID |
+| setting_key | VARCHAR(100) | UNIQUE NOT NULL | 設定キー |
+| setting_value | TEXT | NOT NULL | 設定値 |
+| setting_type | VARCHAR(20) | DEFAULT 'string' | 型: string/number/boolean/json |
+| description | TEXT | | 設定の説明 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 作成日時 |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | 更新日時 |
+| updated_by | UUID | FK → auth.users(id) | 更新者 |
+
+**設定キー:**
+- `base_address`: 基準住所（会社・事務所）
+- `base_lat`: 基準住所の緯度
+- `base_lng`: 基準住所の経度
+
+**RLSポリシー:**
+- SELECT: 認証済みユーザーが閲覧可能
+- ALL: 認証済みユーザー全員が操作可能
 
 #### projects（案件）の拡張
 
@@ -1632,6 +1664,102 @@ ON employees_history(employee_code, operation_at DESC);
 - 終了日: 必須
 - 契約金額: 必須、0以上の整数
 - 予算時間: 必須、0より大きい
+
+### Phase 15: 自動距離計算機能（完了 ✅）
+
+**実装内容:**
+- 現場住所から基準住所（会社・事務所）までの距離・時間を自動計算
+- Nominatim（OpenStreetMap）でジオコーディング（日本語住所対応）
+- OpenRouteServiceでルート計算
+- 住所正規化（郵便番号削除、全角→半角変換）
+- 段階的住所検索（詳細→市区町村レベルへフォールバック）
+- 設定画面での基準住所管理
+
+**主要ファイル:**
+- `supabase/functions/calculate-distance/index.ts`: Edge Function（距離計算API）
+- `src/lib/distanceApi.ts`: Edge Function呼び出しAPI
+- `src/lib/settingsApi.ts`: 設定CRUD API
+- `src/pages/SettingsPage.tsx`: 基準住所設定画面
+- `src/pages/FieldFormPage.tsx`: 自動距離計算ボタン追加
+- `src/schemas/settingsSchema.ts`: 設定バリデーション
+
+**アーキテクチャ:**
+
+```
+[フロントエンド] → [Supabase Edge Function] → [Nominatim API] → [ORS Directions API]
+                           ↑
+                   ORS_API_KEY (secrets)
+```
+
+- APIキーはEdge Functions secretsに保存（クライアント非公開）
+- ジオコーディング: Nominatim（日本語住所対応、無料）
+- ルーティング: OpenRouteService（無料枠2,000リクエスト/日）
+
+**機能詳細:**
+
+#### 住所正規化処理
+Edge Function内で住所を前処理:
+1. 郵便番号削除（〒xxx-xxxx形式）
+2. 全角数字→半角数字変換
+3. 全角記号→半角変換（−→-, 　→スペース）
+
+#### 段階的住所検索
+Nominatimで住所が見つからない場合、段階的に簡略化:
+1. 完全な住所で検索
+2. 番地を削除して検索
+3. 都道府県+市区町村のみで検索
+
+#### 設定画面（SettingsPage）
+- 基準住所入力（住所、緯度、経度）
+- 緯度・経度は手動入力（Google Maps等で確認）
+- app_settingsテーブルに保存
+
+#### 現場フォームの自動距離計算ボタン
+- 「移動費情報」セクションのヘッダーに配置
+- 住所入力後にボタンをクリック
+- 片道移動距離（km）と片道移動時間（分）を自動入力
+- 計算中はローディング表示
+
+#### API層
+
+**distanceApi.ts:**
+- `calculateDistanceFromBase(destinationAddress, baseLat, baseLng)`: Edge Function呼び出し
+
+**settingsApi.ts:**
+- `getBaseAddressSettings()`: 基準住所設定取得
+- `saveBaseAddressSettings(address, lat, lng)`: 基準住所設定保存
+
+#### Edge Function（calculate-distance）
+- POST `/functions/v1/calculate-distance`
+- リクエストボディ: `{ destinationAddress, baseLat, baseLng }`
+- レスポンス: `{ distanceKm, durationMinutes, geocodedAddress }`
+- エラー時は適切なエラーメッセージを返却
+
+#### エラーハンドリング
+
+| ケース | メッセージ |
+|--------|-----------|
+| 基準住所未設定 | 基準住所が設定されていません。設定画面から登録してください。 |
+| 住所が見つからない | 住所が見つかりませんでした。正しい住所を入力してください。 |
+| API利用制限 | API利用制限に達しました。しばらく待ってから再試行してください。 |
+| APIキー無効 | APIキーが無効です。管理者に連絡してください。 |
+
+#### ローカル開発時のセットアップ
+
+1. OpenRouteServiceでAPIキーを取得（https://openrouteservice.org/）
+2. `supabase/functions/.env.local`にAPIキーを設定:
+   ```
+   ORS_API_KEY=your-api-key-here
+   ```
+3. Edge Functionを起動:
+   ```bash
+   npx supabase functions serve --env-file supabase/functions/.env.local --no-verify-jwt
+   ```
+
+#### 帰属表示
+設定画面に以下の帰属表示を追加:
+- OpenRouteService（ルーティングAPI）
+- OpenStreetMap（地図データ）
 
 ---
 

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Navigation, Loader2 } from 'lucide-react'
 import { translateSupabaseError } from '@/lib/errorMessages'
+import { calculateDistanceFromBase } from '@/lib/distanceApi'
+import { getBaseAddressSettings } from '@/lib/settingsApi'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -27,6 +29,7 @@ interface FieldFormPageProps {
 export function FieldFormPage({ onNavigate, fieldId }: FieldFormPageProps) {
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [calculating, setCalculating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isEditMode = !!fieldId
 
@@ -58,6 +61,48 @@ export function FieldFormPage({ onNavigate, fieldId }: FieldFormPageProps) {
   const hasElectricity = watch('has_electricity')
   const hasWater = watch('has_water')
   const hasToilet = watch('has_toilet')
+  const address = watch('address')
+
+  const handleCalculateDistance = async () => {
+    if (!address?.trim()) {
+      toast.error('住所を入力してください')
+      return
+    }
+
+    setCalculating(true)
+    try {
+      // 基準住所設定を取得
+      const settingsResult = await getBaseAddressSettings()
+      if (settingsResult.error) {
+        toast.error(`設定取得エラー: ${settingsResult.error}`)
+        return
+      }
+      if (!settingsResult.data) {
+        toast.error('基準住所が設定されていません。設定画面から登録してください。')
+        return
+      }
+
+      const { lat: baseLat, lng: baseLng } = settingsResult.data
+
+      // 距離計算
+      const result = await calculateDistanceFromBase(address, baseLat, baseLng)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+
+      if (result.data) {
+        setValue('travel_distance_km', result.data.distanceKm, { shouldValidate: true, shouldDirty: true })
+        setValue('travel_time_minutes', result.data.durationMinutes, { shouldValidate: true, shouldDirty: true })
+        toast.success(`距離を計算しました: ${result.data.distanceKm}km / ${result.data.durationMinutes}分`)
+      }
+    } catch (err) {
+      console.error('Distance calculation error:', err)
+      toast.error('距離計算中にエラーが発生しました')
+    } finally {
+      setCalculating(false)
+    }
+  }
 
   useEffect(() => {
     if (isEditMode && fieldId) {
@@ -302,7 +347,28 @@ export function FieldFormPage({ onNavigate, fieldId }: FieldFormPageProps) {
           {/* 移動費情報 */}
           <Card>
             <CardHeader>
-              <CardTitle>移動費情報</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>移動費情報</CardTitle>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCalculateDistance}
+                  disabled={calculating || !address?.trim()}
+                >
+                  {calculating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      計算中...
+                    </>
+                  ) : (
+                    <>
+                      <Navigation className="h-4 w-4 mr-2" />
+                      自動距離計算
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -24,10 +24,12 @@ const TABLE_NAMES: Record<string, string> = {
   business_days: '営業日数',
   monthly_costs: '月次経費',
   fields: '現場',
+  annual_contracts: '年間契約',
   projects: '案件',
   work_days: '作業日',
   work_records: '従事者記録',
   expenses: '経費',
+  monthly_revenue_allocations: '月次収益配分',
 }
 
 export function DataManagementPage({ onNavigate }: DataManagementPageProps) {

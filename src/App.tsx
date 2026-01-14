@@ -20,6 +20,7 @@ import { DataManagementPage } from '@/pages/DataManagementPage'
 import { AnnualContractListPage } from '@/pages/AnnualContractListPage'
 import { AnnualContractFormPage } from '@/pages/AnnualContractFormPage'
 import { AnnualContractDetailPage } from '@/pages/AnnualContractDetailPage'
+import { SettingsPage } from '@/pages/SettingsPage'
 import type { Page } from '@/lib/types'
 
 const NAV_STATE_KEY = 'niwalog_nav_state'
@@ -292,6 +293,9 @@ function App() {
             contractId={selectedAnnualContractId}
             onNavigate={handleNavigate}
           />
+        )}
+        {currentPage === 'settings' && (
+          <SettingsPage onBack={() => handleNavigate('dashboard')} />
         )}
       </div>
       <Toaster position="top-center" closeButton />

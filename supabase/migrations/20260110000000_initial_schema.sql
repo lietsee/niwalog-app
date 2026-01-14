@@ -1745,6 +1745,78 @@ ORDER BY id, valid_from DESC;
 COMMENT ON VIEW fields_full_history IS '現場の完全な履歴ビュー: 現在のレコードと過去の履歴を統合して表示';
 
 -- ============================================================================
+-- アプリケーション設定テーブル
+-- ============================================================================
+-- 基準住所（距離計算用）などのアプリケーション設定を保存
+
+CREATE TABLE app_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  setting_key VARCHAR(100) UNIQUE NOT NULL,
+  setting_value TEXT NOT NULL,
+  setting_type VARCHAR(20) NOT NULL DEFAULT 'string'
+    CHECK (setting_type IN ('string', 'number', 'boolean', 'json')),
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_by UUID REFERENCES auth.users(id)
+);
+
+COMMENT ON TABLE app_settings IS 'アプリケーション設定';
+COMMENT ON COLUMN app_settings.setting_key IS '設定キー（一意）';
+COMMENT ON COLUMN app_settings.setting_value IS '設定値（文字列）';
+COMMENT ON COLUMN app_settings.setting_type IS '設定値の型（string/number/boolean/json）';
+COMMENT ON COLUMN app_settings.description IS '設定の説明';
+
+-- RLS
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can view settings"
+  ON app_settings FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can insert settings"
+  ON app_settings FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can update settings"
+  ON app_settings FOR UPDATE
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can delete settings"
+  ON app_settings FOR DELETE
+  USING (auth.role() = 'authenticated');
+
+-- updated_at 自動更新トリガー
+CREATE TRIGGER update_app_settings_updated_at
+  BEFORE UPDATE ON app_settings
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- 基準住所一括保存RPC（トランザクションで整合性を保証）
+CREATE OR REPLACE FUNCTION save_base_address_settings(
+  p_address TEXT,
+  p_lat NUMERIC,
+  p_lng NUMERIC
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- 3つの設定を同一トランザクションで保存
+  INSERT INTO app_settings (setting_key, setting_value, setting_type, description, updated_by)
+  VALUES
+    ('base_address', p_address, 'string', '基準住所（距離計算の起点）', auth.uid()),
+    ('base_lat', p_lat::TEXT, 'number', '基準住所の緯度', auth.uid()),
+    ('base_lng', p_lng::TEXT, 'number', '基準住所の経度', auth.uid())
+  ON CONFLICT (setting_key) DO UPDATE SET
+    setting_value = EXCLUDED.setting_value,
+    updated_at = NOW(),
+    updated_by = EXCLUDED.updated_by;
+END;
+$$;
+
+-- ============================================================================
 -- 完了
 -- ============================================================================
 -- このスキーマをSupabaseのSQL Editorで実行してください。
