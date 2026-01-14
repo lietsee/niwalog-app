@@ -20,6 +20,7 @@ interface DataManagementPageProps {
 
 // Table name translations
 const TABLE_NAMES: Record<string, string> = {
+  app_settings: 'アプリ設定',
   employees: '従業員',
   business_days: '営業日数',
   monthly_costs: '月次経費',

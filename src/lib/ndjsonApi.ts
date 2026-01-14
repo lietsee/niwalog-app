@@ -6,6 +6,7 @@ const SCHEMA_VERSION = 1
 
 // Table names in import order (respecting foreign key constraints)
 const TABLE_ORDER = [
+  'app_settings',
   'employees',
   'business_days',
   'monthly_costs',
@@ -22,6 +23,7 @@ type TableName = (typeof TABLE_ORDER)[number]
 
 // Foreign key mapping for each table
 const FOREIGN_KEY_MAP: Record<TableName, { column: string; refTable: TableName }[]> = {
+  app_settings: [],
   employees: [],
   business_days: [],
   monthly_costs: [],
@@ -39,6 +41,7 @@ const FOREIGN_KEY_MAP: Record<TableName, { column: string; refTable: TableName }
 
 // Primary key for each table
 const PRIMARY_KEY_MAP: Record<TableName, string> = {
+  app_settings: 'id',
   employees: 'employee_code',
   business_days: 'id',
   monthly_costs: 'id',
@@ -54,6 +57,7 @@ const PRIMARY_KEY_MAP: Record<TableName, string> = {
 // UNIQUE constraints for each table (excluding primary key)
 // Used to check for conflicts in restore mode
 const UNIQUE_CONSTRAINT_MAP: Record<TableName, string[]> = {
+  app_settings: ['setting_key'],
   employees: [], // employee_code is PK
   business_days: [], // Composite unique (year, day_type) - handled separately
   monthly_costs: [],

@@ -1500,7 +1500,7 @@ ON employees_history(employee_code, operation_at DESC);
 ダッシュボードから「データ管理」ボタンでアクセス。
 
 **エクスポート:**
-- 全8テーブルのデータをNDJSON形式でダウンロード
+- 全11テーブルのデータをNDJSON形式でダウンロード
 - ファイル名: `niwalog_backup_YYYY-MM-DD.ndjson`
 - 各行に `_table`（テーブル名）と `_version`（スキーマバージョン）を付与
 
@@ -1533,7 +1533,7 @@ ON employees_history(employee_code, operation_at DESC);
 
 **ロールバック処理:**
 - エラー発生時、挿入済みレコードを外部キー制約の逆順で削除
-- 削除順序: monthly_revenue_allocations → expenses → work_records → work_days → projects → annual_contracts → fields → monthly_costs → business_days → employees
+- 削除順序: monthly_revenue_allocations → expenses → work_records → work_days → projects → annual_contracts → fields → monthly_costs → business_days → employees → app_settings
 
 #### NDJSON形式
 
@@ -1544,16 +1544,17 @@ ON employees_history(employee_code, operation_at DESC);
 ```
 
 **対象テーブル（インポート順序）:**
-1. employees（独立）
-2. business_days（独立）
-3. monthly_costs（独立）
-4. fields（独立）
-5. annual_contracts（← fields）
-6. projects（← fields, annual_contracts）
-7. work_days（← projects）
-8. work_records（← work_days）
-9. expenses（← projects）
-10. monthly_revenue_allocations（← annual_contracts）
+1. app_settings（独立・設定データ）
+2. employees（独立）
+3. business_days（独立）
+4. monthly_costs（独立）
+5. fields（独立）
+6. annual_contracts（← fields）
+7. projects（← fields, annual_contracts）
+8. work_days（← projects）
+9. work_records（← work_days）
+10. expenses（← projects）
+11. monthly_revenue_allocations（← annual_contracts）
 
 #### API層（ndjsonApi.ts）
 - `exportAllToNDJSON()`: 全データをNDJSON形式でエクスポート
