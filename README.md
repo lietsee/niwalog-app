@@ -1751,10 +1751,16 @@ Nominatimで住所が見つからない場合、段階的に簡略化:
    ```
    ORS_API_KEY=your-api-key-here
    ```
-3. Edge Functionを起動:
+3. Supabaseローカル環境を起動（まだの場合）:
+   ```bash
+   npx supabase start
+   ```
+4. Edge Functionを起動:
    ```bash
    npx supabase functions serve --env-file supabase/functions/.env.local --no-verify-jwt
    ```
+
+**重要:** フロントエンドの`VITE_SUPABASE_URL`がローカルのSupabase URL（`http://127.0.0.1:54621`）と一致していることを確認してください。本番URLになっていると404エラーが発生します。ポート番号は`npx supabase status`で確認できます。
 
 #### 帰属表示
 設定画面に以下の帰属表示を追加:
@@ -1847,6 +1853,48 @@ SELECT * FROM auth.users WHERE email = 'test@example.com';
 SELECT id, field_code, created_by FROM fields;
 ```
 
+### Edge Functionで401 Unauthorizedエラー
+
+**原因:**
+- フロントエンドでログインしていない
+- Authorizationヘッダーが送信されていない
+- ローカル開発時にJWT検証に失敗している
+
+**解決方法:**
+1. フロントエンドでログイン済みであることを確認
+2. ブラウザの開発者ツールでAuthorizationヘッダーが送信されているか確認
+3. Edge Functionを`--no-verify-jwt`フラグ付きで起動:
+   ```bash
+   npx supabase functions serve --env-file supabase/functions/.env.local --no-verify-jwt
+   ```
+
+### Edge Functionで404 Not Foundエラー
+
+**原因1:** `VITE_SUPABASE_URL`が本番URLになっている
+
+**解決方法:** `.env.local`でローカルURLを設定（ポート番号は`npx supabase status`で確認）:
+```
+VITE_SUPABASE_URL=http://127.0.0.1:54621
+```
+
+**原因2:** `supabase start`が起動していない
+
+**解決方法:**
+```bash
+npx supabase start
+```
+
+### 自動距離計算で住所が見つからない
+
+**原因:** 日本語住所のフォーマットが認識されない場合があります。
+
+**対処法:**
+1. 郵便番号を削除して試す
+2. 番地を省略して「都道府県+市区町村」のみで試す
+3. 全角数字を半角に変換
+
+Edge Function内で自動正規化を行いますが、極端に特殊な住所フォーマットは認識できない場合があります。
+
 ### Tailwind CSS v4エラー
 
 - Tailwind CSS 3.4.17にダウングレード済み
@@ -1886,11 +1934,11 @@ INSERT INTO fields (id, field_code, field_name, ...) VALUES
 **ブランチ:** main
 
 **コミット履歴（最新）:**
-- カスケード削除機能と履歴表示修正
-- 人件費計算の履歴ベース化と履歴トリガーの統合
-- 全履歴テーブルにINSERTトリガーを追加
-- 履歴の完全性強化（INSERT/RESTORE対応）
-- 従業員コード重複禁止 + 履歴からの復元機能
+- 自動距離計算機能（Phase 15）
+- NDJSONインポート/エクスポートで年間契約テーブルに対応
+- 年間契約・月次収益按分機能を追加
+- NDJSONインポートのUNIQUE制約チェックを追加
+- NDJSONインポート・エクスポート機能
 
 ---
 
