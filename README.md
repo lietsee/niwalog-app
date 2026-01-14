@@ -1501,7 +1501,7 @@ ON employees_history(employee_code, operation_at DESC);
 
 **ロールバック処理:**
 - エラー発生時、挿入済みレコードを外部キー制約の逆順で削除
-- 削除順序: expenses → work_records → work_days → projects → fields → monthly_costs → business_days → employees
+- 削除順序: monthly_revenue_allocations → expenses → work_records → work_days → projects → annual_contracts → fields → monthly_costs → business_days → employees
 
 #### NDJSON形式
 
@@ -1516,10 +1516,12 @@ ON employees_history(employee_code, operation_at DESC);
 2. business_days（独立）
 3. monthly_costs（独立）
 4. fields（独立）
-5. projects（← fields）
-6. work_days（← projects）
-7. work_records（← work_days）
-8. expenses（← projects）
+5. annual_contracts（← fields）
+6. projects（← fields, annual_contracts）
+7. work_days（← projects）
+8. work_records（← work_days）
+9. expenses（← projects）
+10. monthly_revenue_allocations（← annual_contracts）
 
 #### API層（ndjsonApi.ts）
 - `exportAllToNDJSON()`: 全データをNDJSON形式でエクスポート

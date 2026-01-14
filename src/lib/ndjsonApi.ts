@@ -10,10 +10,12 @@ const TABLE_ORDER = [
   'business_days',
   'monthly_costs',
   'fields',
+  'annual_contracts',
   'projects',
   'work_days',
   'work_records',
   'expenses',
+  'monthly_revenue_allocations',
 ] as const
 
 type TableName = (typeof TABLE_ORDER)[number]
@@ -24,10 +26,15 @@ const FOREIGN_KEY_MAP: Record<TableName, { column: string; refTable: TableName }
   business_days: [],
   monthly_costs: [],
   fields: [],
-  projects: [{ column: 'field_id', refTable: 'fields' }],
+  annual_contracts: [{ column: 'field_id', refTable: 'fields' }],
+  projects: [
+    { column: 'field_id', refTable: 'fields' },
+    { column: 'annual_contract_id', refTable: 'annual_contracts' },
+  ],
   work_days: [{ column: 'project_id', refTable: 'projects' }],
   work_records: [{ column: 'work_day_id', refTable: 'work_days' }],
   expenses: [{ column: 'project_id', refTable: 'projects' }],
+  monthly_revenue_allocations: [{ column: 'annual_contract_id', refTable: 'annual_contracts' }],
 }
 
 // Primary key for each table
@@ -36,10 +43,12 @@ const PRIMARY_KEY_MAP: Record<TableName, string> = {
   business_days: 'id',
   monthly_costs: 'id',
   fields: 'id',
+  annual_contracts: 'id',
   projects: 'id',
   work_days: 'id',
   work_records: 'id',
   expenses: 'id',
+  monthly_revenue_allocations: 'id',
 }
 
 // UNIQUE constraints for each table (excluding primary key)
@@ -49,10 +58,12 @@ const UNIQUE_CONSTRAINT_MAP: Record<TableName, string[]> = {
   business_days: [], // Composite unique (year, day_type) - handled separately
   monthly_costs: [],
   fields: ['field_code'],
+  annual_contracts: [], // Composite unique (field_id, contract_name, fiscal_year) - handled separately
   projects: [],
   work_days: [], // Composite unique (project_id, work_date) - FK handles this
   work_records: [],
   expenses: [],
+  monthly_revenue_allocations: [], // Composite unique (annual_contract_id, allocation_month) - handled separately
 }
 
 // NDJSON record with metadata
@@ -394,6 +405,37 @@ export async function importFromNDJSON(
                 continue
               }
             }
+
+            // Check composite unique for annual_contracts (field_id, contract_name, fiscal_year)
+            if (tableName === 'annual_contracts') {
+              const { data: existingAc } = await supabase
+                .from('annual_contracts')
+                .select('id')
+                .eq('field_id', data.field_id)
+                .eq('contract_name', data.contract_name)
+                .eq('fiscal_year', data.fiscal_year)
+                .maybeSingle()
+
+              if (existingAc) {
+                skipped[tableName]++
+                continue
+              }
+            }
+
+            // Check composite unique for monthly_revenue_allocations (annual_contract_id, allocation_month)
+            if (tableName === 'monthly_revenue_allocations') {
+              const { data: existingMra } = await supabase
+                .from('monthly_revenue_allocations')
+                .select('id')
+                .eq('annual_contract_id', data.annual_contract_id)
+                .eq('allocation_month', data.allocation_month)
+                .maybeSingle()
+
+              if (existingMra) {
+                skipped[tableName]++
+                continue
+              }
+            }
           }
 
           processedRecords.push(data)
@@ -512,6 +554,37 @@ export async function importFromNDJSON(
               .maybeSingle()
 
             if (existingBd) {
+              skipped[tableName]++
+              continue
+            }
+          }
+
+          // Check composite unique for annual_contracts (field_id, contract_name, fiscal_year)
+          if (tableName === 'annual_contracts') {
+            const { data: existingAc } = await supabase
+              .from('annual_contracts')
+              .select('id')
+              .eq('field_id', data.field_id)
+              .eq('contract_name', data.contract_name)
+              .eq('fiscal_year', data.fiscal_year)
+              .maybeSingle()
+
+            if (existingAc) {
+              skipped[tableName]++
+              continue
+            }
+          }
+
+          // Check composite unique for monthly_revenue_allocations (annual_contract_id, allocation_month)
+          if (tableName === 'monthly_revenue_allocations') {
+            const { data: existingMra } = await supabase
+              .from('monthly_revenue_allocations')
+              .select('id')
+              .eq('annual_contract_id', data.annual_contract_id)
+              .eq('allocation_month', data.allocation_month)
+              .maybeSingle()
+
+            if (existingMra) {
               skipped[tableName]++
               continue
             }
