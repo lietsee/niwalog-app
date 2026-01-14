@@ -337,9 +337,12 @@ export async function importFromNDJSON(
         for (const record of tableRecords) {
           let data = stripMetadata(record)
 
-          // Override created_by with current user
+          // Override created_by and updated_by with current user (to avoid FK violations)
           if ('created_by' in data) {
             data.created_by = currentUserId
+          }
+          if ('updated_by' in data) {
+            data.updated_by = currentUserId
           }
 
           // For work_records, remove auto-calculated fields
@@ -487,9 +490,12 @@ export async function importFromNDJSON(
         for (const record of tableRecords) {
           let data = stripMetadata(record)
 
-          // Override created_by with current user
+          // Override created_by and updated_by with current user (to avoid FK violations)
           if ('created_by' in data) {
             data.created_by = currentUserId
+          }
+          if ('updated_by' in data) {
+            data.updated_by = currentUserId
           }
 
           // For work_records, remove auto-calculated fields
