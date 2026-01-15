@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { Plus, Search, LayoutDashboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -13,9 +13,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { FieldCard } from '@/components/FieldCard'
+import { DateFilter } from '@/components/DateFilter'
 import {
-  listAllFields,
-  searchFields,
+  searchFieldsWithDateFilter,
   deleteFieldWithCascade,
   getFieldRelatedCounts,
   getFieldFinancialSummaries,
@@ -45,46 +45,26 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
     new Map()
   )
 
-  const loadFields = async () => {
+  // 日付フィルター用のstate
+  const [filterYear, setFilterYear] = useState<number | undefined>(undefined)
+  const [filterMonth, setFilterMonth] = useState<number | undefined>(undefined)
+  const [filterDay, setFilterDay] = useState<number | undefined>(undefined)
+
+  const loadFields = useCallback(async (term?: string) => {
     setLoading(true)
     setError(null)
 
-    const { data, error: err } = await listAllFields()
+    // テキスト検索と日付フィルタの両方を適用
+    const { data, error: err } = await searchFieldsWithDateFilter(
+      term?.trim() || undefined,
+      filterYear,
+      filterMonth,
+      filterDay
+    )
+
     if (err) {
       setError(err)
       toast.error(`読み込みに失敗しました: ${err}`)
-    } else {
-      setFields(data || [])
-      // 財務サマリーを取得
-      if (data && data.length > 0) {
-        const { data: summaries } = await getFieldFinancialSummaries(data)
-        if (summaries) {
-          setFinancialSummaries(summaries)
-        }
-      }
-    }
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    loadFields()
-  }, [])
-
-  const handleSearch = async () => {
-    if (!searchTerm.trim()) {
-      loadFields()
-      return
-    }
-
-    setLoading(true)
-    setError(null)
-
-    // 統合検索（現場コード、現場名、住所、顧客名）
-    const { data, error: err } = await searchFields(searchTerm)
-
-    if (err) {
-      setError(err)
-      toast.error(`検索に失敗しました: ${err}`)
     } else {
       setFields(data || [])
       // 財務サマリーを取得
@@ -97,8 +77,33 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
         setFinancialSummaries(new Map())
       }
     }
-
     setLoading(false)
+  }, [filterYear, filterMonth, filterDay])
+
+  // 初回ロードと日付フィルター変更時に再読み込み
+  useEffect(() => {
+    loadFields(searchTerm)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterYear, filterMonth, filterDay])
+
+  const handleSearch = async () => {
+    loadFields(searchTerm)
+  }
+
+  // 日付フィルタークリア
+  const handleClearDateFilter = () => {
+    setFilterYear(undefined)
+    setFilterMonth(undefined)
+    setFilterDay(undefined)
+  }
+
+  // すべてクリア（テキスト検索 + 日付フィルター）
+  const handleClearAll = () => {
+    setSearchTerm('')
+    handleClearDateFilter()
+    // 日付フィルターがクリアされるとuseEffectで再読み込みされるが、
+    // searchTermも同時にクリアするので手動で呼ぶ
+    loadFields()
   }
 
   const handleEdit = (field: Field) => {
@@ -188,7 +193,7 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="現場コードまたは現場名で検索..."
+                placeholder="現場コード、現場名、住所、顧客名で検索..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={(e) => {
@@ -202,19 +207,42 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
             <Button onClick={handleSearch} variant="secondary">
               検索
             </Button>
-            {searchTerm && (
-              <Button
-                onClick={() => {
-                  setSearchTerm('')
-                  loadFields()
-                }}
-                variant="outline"
-              >
-                クリア
+            {(searchTerm || filterYear) && (
+              <Button onClick={handleClearAll} variant="outline">
+                すべてクリア
               </Button>
             )}
           </div>
+
+          {/* 日付フィルター */}
+          <div className="bg-white rounded-lg border p-3">
+            <DateFilter
+              year={filterYear}
+              month={filterMonth}
+              day={filterDay}
+              onYearChange={setFilterYear}
+              onMonthChange={setFilterMonth}
+              onDayChange={setFilterDay}
+              onClear={handleClearDateFilter}
+            />
+          </div>
         </div>
+
+        {/* フィルター適用中の表示 */}
+        {(searchTerm || filterYear) && (
+          <div className="mb-4 text-sm text-muted-foreground">
+            絞り込み条件:
+            {searchTerm && <span className="ml-2">「{searchTerm}」</span>}
+            {filterYear && (
+              <span className="ml-2">
+                {filterYear}年
+                {filterMonth && `${filterMonth}月`}
+                {filterDay && `${filterDay}日`}
+              </span>
+            )}
+            に該当する現場 ({fields.length}件)
+          </div>
+        )}
 
         {error && (
           <Card className="mb-6 border-destructive">
@@ -227,7 +255,7 @@ export function FieldListPage({ onNavigate }: FieldListPageProps) {
         {fields.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center text-muted-foreground">
-              {searchTerm
+              {searchTerm || filterYear
                 ? '検索結果がありません'
                 : '現場が登録されていません。「新規登録」ボタンから登録してください。'}
             </CardContent>

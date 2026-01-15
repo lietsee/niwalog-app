@@ -265,7 +265,8 @@ niwalog-app/
 │   │   ├── MonthlyChart.tsx      # 月別グラフ（Recharts）
 │   │   ├── RecentProjectList.tsx # 直近案件リスト
 │   │   ├── EmployeeHoursTable.tsx # 従業員稼働テーブル
-│   │   └── EmployeeCard.tsx      # 従業員カード表示
+│   │   ├── EmployeeCard.tsx      # 従業員カード表示
+│   │   └── DateFilter.tsx        # 日付フィルターコンポーネント
 │   ├── schemas/                  # Zodバリデーションスキーマ
 │   │   ├── fieldSchema.ts
 │   │   ├── projectSchema.ts
@@ -784,6 +785,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE monthly_revenue_allocations;
 **実装内容:**
 - 現場CRUD（作成・読取・更新・削除）
 - 統合検索機能（現場コード・現場名・住所・顧客名）
+- 日付フィルター機能（年・年月・年月日での絞り込み）
 - フォームバリデーション（Zod）
 - エラーメッセージ日本語化
 - トースト通知（Sonner）
@@ -793,6 +795,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE monthly_revenue_allocations;
 - `src/pages/FieldListPage.tsx`: 現場一覧・検索・削除
 - `src/pages/FieldFormPage.tsx`: 現場作成・編集フォーム
 - `src/components/FieldCard.tsx`: 現場カード表示
+- `src/components/DateFilter.tsx`: 日付フィルターコンポーネント
 - `src/lib/fieldsApi.ts`: 現場API（全CRUD + 検索）
 - `src/schemas/fieldSchema.ts`: Zodバリデーションスキーマ
 - `src/lib/errorMessages.ts`: エラーメッセージ翻訳
@@ -802,6 +805,11 @@ ALTER PUBLICATION supabase_realtime ADD TABLE monthly_revenue_allocations;
 #### 現場一覧（FieldListPage）
 - 全現場を現場コード順に表示
 - 検索機能（現場コード・現場名・住所・顧客名を対象）
+- **日付フィルター機能**: 案件の実施日で現場を絞り込み
+  - 年のみ指定: その年に案件がある現場を表示
+  - 年月指定: その年月に案件がある現場を表示
+  - 年月日指定: その日に案件がある現場を表示
+  - テキスト検索と組み合わせ可能（AND条件）
 - 検索結果のリアルタイム表示
 - 「新規登録」ボタン
 - 各現場に「編集」「削除」ボタン
@@ -830,6 +838,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE monthly_revenue_allocations;
 - `searchFieldsByCode(term)`: 現場コード検索
 - `searchFieldsByName(term)`: 現場名検索
 - `searchFields(term)`: 統合検索（コード・名・住所・顧客名）
+- `searchFieldsWithDateFilter(term?, year?, month?, day?)`: 統合検索 + 日付フィルタ
+- `getFieldIdsByDateFilter(year?, month?, day?)`: 日付条件で現場ID一覧取得
 - `createField(field)`: 現場作成（created_byを自動設定）
 - `updateField(id, field)`: 現場更新
 - `deleteField(id)`: 現場削除（履歴に自動退避）

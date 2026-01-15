@@ -546,3 +546,121 @@ export async function getFieldFinancialSummaries(
     }
   }
 }
+
+/**
+ * 日付条件に合致する案件を持つ現場のIDリストを取得
+ */
+export async function getFieldIdsByDateFilter(
+  year?: number,
+  month?: number,
+  day?: number
+): Promise<ApiResponse<string[]>> {
+  try {
+    // 日付条件がない場合は空配列を返す（全件表示の意味）
+    if (!year) {
+      return { data: [], error: null, status: 200 }
+    }
+
+    let startDate: string
+    let endDate: string
+
+    if (year && month && day) {
+      // 年月日指定: 特定の日
+      const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      startDate = date
+      endDate = date
+    } else if (year && month) {
+      // 年月指定: その月の1日〜末日
+      startDate = `${year}-${String(month).padStart(2, '0')}-01`
+      const lastDay = new Date(year, month, 0).getDate()
+      endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    } else {
+      // 年のみ指定: その年の1月1日〜12月31日
+      startDate = `${year}-01-01`
+      endDate = `${year}-12-31`
+    }
+
+    const { data, error } = await supabase
+      .from('projects')
+      .select('field_id')
+      .gte('implementation_date', startDate)
+      .lte('implementation_date', endDate)
+
+    if (error) {
+      console.error('Supabase error:', error)
+      return { data: null, error: error.message, status: 400 }
+    }
+
+    // field_id の重複を除去
+    const uniqueFieldIds = [...new Set((data || []).map((p) => p.field_id))]
+    return { data: uniqueFieldIds, error: null, status: 200 }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    return {
+      data: null,
+      error: 'システムエラーが発生しました',
+      status: 500,
+    }
+  }
+}
+
+/**
+ * 統合検索（テキスト検索 + 日付フィルタ）
+ */
+export async function searchFieldsWithDateFilter(
+  searchTerm?: string,
+  year?: number,
+  month?: number,
+  day?: number
+): Promise<ApiResponse<Field[]>> {
+  try {
+    // 1. 日付フィルタがある場合、該当するfield_idを取得
+    let fieldIdFilter: string[] | null = null
+    if (year) {
+      const { data: fieldIds, error: dateError } = await getFieldIdsByDateFilter(
+        year,
+        month,
+        day
+      )
+      if (dateError) {
+        return { data: null, error: dateError, status: 400 }
+      }
+      fieldIdFilter = fieldIds
+      // 該当する現場がない場合は空配列を返す
+      if (fieldIdFilter && fieldIdFilter.length === 0) {
+        return { data: [], error: null, status: 200 }
+      }
+    }
+
+    // 2. 現場を検索
+    let query = supabase.from('fields').select('*')
+
+    // テキスト検索条件
+    if (searchTerm && searchTerm.trim()) {
+      query = query.or(
+        `field_code.ilike.%${searchTerm}%,field_name.ilike.%${searchTerm}%,address.ilike.%${searchTerm}%,customer_name.ilike.%${searchTerm}%`
+      )
+    }
+
+    // 日付フィルタ条件
+    if (fieldIdFilter) {
+      query = query.in('id', fieldIdFilter)
+    }
+
+    const { data, error } = await query.order('field_code')
+
+    if (error) {
+      console.error('Supabase error:', error)
+      return { data: null, error: error.message, status: 400 }
+    }
+
+    return { data: data || [], error: null, status: 200 }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    return {
+      data: null,
+      error: 'システムエラーが発生しました',
+      status: 500,
+    }
+  }
+}
