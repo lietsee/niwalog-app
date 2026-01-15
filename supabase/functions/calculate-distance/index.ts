@@ -186,10 +186,13 @@ async function calculateRoute(
   const distanceMeters = route.summary.distance
   const durationSeconds = route.summary.duration
 
+  // 日本の一般道では信号待ち・渋滞を考慮して2倍の係数をかける
+  const adjustedDurationSeconds = durationSeconds * 2
+
   return {
     result: {
       distanceKm: Math.round(distanceMeters / 100) / 10, // 0.1km単位で丸め
-      durationMinutes: Math.round(durationSeconds / 60), // 分単位で丸め
+      durationMinutes: Math.round(adjustedDurationSeconds / 60), // 分単位で丸め（2倍補正済み）
     },
   }
 }
